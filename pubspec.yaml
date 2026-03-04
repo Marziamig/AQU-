@@ -1,0 +1,48 @@
+name: aqui
+description: A local services classifieds app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  provider: ^6.0.0
+
+  # Mappe
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # Geolocalizzazione
+  geolocator: ^9.0.2
+
+  # HTTP
+  http: ^1.2.0
+
+  # Backend
+  supabase_flutter: ^2.5.3
+  shared_preferences: ^2.0.15
+
+  # Stripe
+  flutter_stripe: ^11.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/mappa.png
