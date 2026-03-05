@@ -36,8 +36,10 @@ Deno.serve(async (req: Request) => {
     const params = new URLSearchParams();
 
     params.append("mode", "payment");
-    params.append("success_url", "https://aqui.app/pro-success");
-    params.append("cancel_url", "https://aqui.app/pro-cancel");
+
+    // redirect gestito dall'app mobile
+    params.append("success_url", "aqui://pro-success");
+    params.append("cancel_url", "aqui://pro-cancel");
 
     params.append("line_items[0][price_data][currency]", "eur");
     params.append("line_items[0][price_data][product_data][name]", "AQUI PRO");

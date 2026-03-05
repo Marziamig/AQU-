@@ -50,7 +50,6 @@ async function verifyStripeSignature(
 
 Deno.serve(async (req: Request): Promise<Response> => {
   try {
-
     if (req.method === "OPTIONS") {
       return new Response("ok", {
         headers: {
@@ -90,11 +89,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const event = JSON.parse(body);
 
+    // PAGAMENTO SERVIZI
     if (event.type === "payment_intent.succeeded") {
-
       const paymentIntentId = event.data.object.id;
 
-      // recupera request_id
       const paymentRes = await fetch(
         `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}&select=request_id`,
         {
@@ -113,7 +111,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const requestId = payments[0].request_id;
 
-      // aggiorna payments → paid
       await fetch(
         `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}`,
         {
@@ -129,7 +126,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
       );
 
-      // aggiorna ads → status = paid
       await fetch(
         `${supabaseUrl}/rest/v1/ads?id=eq.${requestId}`,
         {
@@ -146,13 +142,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    // ABBONAMENTO PRO
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+
+      const userId = session.metadata?.user_id;
+
+      if (!userId) {
+        return new Response("Missing user_id metadata", { status: 400 });
+      }
+
+      const expires = new Date();
+      expires.setDate(expires.getDate() + 30);
+
+      await fetch(
+        `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            is_pro: true,
+            subscription_status: "active",
+            subscription_expires_at: expires.toISOString(),
+          }),
+        }
+      );
+    }
+
     return new Response("OK", {
       status: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
       },
     });
-
   } catch (err) {
     return new Response(`Webhook error: ${err}`, { status: 400 });
   }

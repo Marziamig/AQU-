@@ -35,15 +35,9 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
         final uri = Uri.parse(checkoutUrl);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
-
+    } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Procedi con il pagamento per attivare PRO'),
-        ),
-      );
-    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Errore pagamento: $e')),
       );
@@ -67,10 +61,6 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
     if (profile['is_pro'] == true) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account PRO attivato')),
-      );
-
       Navigator.pop(context);
     }
   }
@@ -78,7 +68,30 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
   @override
   void initState() {
     super.initState();
+
+    // controlla quando l'utente torna alla app
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshProStatus();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _refreshProStatus();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProSubscriptionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _refreshProStatus();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshProStatus();
+    }
   }
 
   @override
