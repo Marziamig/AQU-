@@ -1,5 +1,3 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
-
 declare const Deno: any;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -52,6 +50,17 @@ async function verifyStripeSignature(
 
 Deno.serve(async (req: Request): Promise<Response> => {
   try {
+
+    if (req.method === "OPTIONS") {
+      return new Response("ok", {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers":
+            "authorization, x-client-info, apikey, content-type",
+        },
+      });
+    }
+
     if (req.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }
@@ -82,9 +91,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const event = JSON.parse(body);
 
     if (event.type === "payment_intent.succeeded") {
+
       const paymentIntentId = event.data.object.id;
 
-      // 1️⃣ Recupera il pagamento per ottenere request_id
+      // recupera request_id
       const paymentRes = await fetch(
         `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}&select=request_id`,
         {
@@ -96,13 +106,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
 
       const payments = await paymentRes.json();
+
       if (!payments.length) {
         return new Response("Payment not found", { status: 400 });
       }
 
       const requestId = payments[0].request_id;
 
-      // 2️⃣ Aggiorna payments → paid
+      // aggiorna payments → paid
       await fetch(
         `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}`,
         {
@@ -118,7 +129,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
       );
 
-      // 3️⃣ Aggiorna ads → status = paid
+      // aggiorna ads → status = paid
       await fetch(
         `${supabaseUrl}/rest/v1/ads?id=eq.${requestId}`,
         {
@@ -135,7 +146,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    return new Response("OK", { status: 200 });
+    return new Response("OK", {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+
   } catch (err) {
     return new Response(`Webhook error: ${err}`, { status: 400 });
   }

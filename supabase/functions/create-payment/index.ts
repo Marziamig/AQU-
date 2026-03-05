@@ -1,7 +1,5 @@
 // Supabase Edge Function - Create Stripe Payment
 
-import "@supabase/functions-js/edge-runtime.d.ts";
-
 declare const Deno: any;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -9,6 +7,17 @@ const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY")!;
 
 Deno.serve(async (req: Request): Promise<Response> => {
   try {
+
+    if (req.method === "OPTIONS") {
+      return new Response("ok", {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers":
+            "authorization, x-client-info, apikey, content-type",
+        },
+      });
+    }
+
     if (req.method !== "POST") {
       return new Response(
         JSON.stringify({ error: "Method not allowed" }),
@@ -36,7 +45,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const amount = body.amount;
     const currency = body.currency ?? "eur";
     const requestId = body.request_id;
-    const requestType = body.request_type; // "service" o "transport"
+    const requestType = body.request_type;
 
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return new Response(
@@ -52,7 +61,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // 🔒 Controllo se esiste già un pagamento completato
+    // 🔒 controllo se esiste già pagamento
     const existingPaymentRes = await fetch(
       `${supabaseUrl}/rest/v1/payments?request_id=eq.${requestId}&status=eq.paid`,
       {
@@ -99,7 +108,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // 🔐 Salvataggio pagamento in tabella payments (status = pending)
+    // 🔐 salva pagamento pending
     await fetch(`${supabaseUrl}/rest/v1/payments`, {
       method: "POST",
       headers: {
@@ -122,13 +131,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         clientSecret: paymentIntent.client_secret,
       }),
       {
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         status: 200,
       }
     );
+
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error }),
+      JSON.stringify({ error }),
       { status: 500 }
     );
   }

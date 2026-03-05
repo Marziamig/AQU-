@@ -17,6 +17,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   double ratingAvg = 0;
   int ratingCount = 0;
+  bool isPro = false;
 
   @override
   void initState() {
@@ -31,7 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final data = await supabase
         .from('profiles')
-        .select('full_name, rating_avg, rating_count')
+        .select('full_name, rating_avg, rating_count, is_pro')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -39,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _nameController.text = data['full_name'] ?? '';
       ratingAvg = (data['rating_avg'] ?? 0).toDouble();
       ratingCount = data['rating_count'] ?? 0;
+      isPro = data['is_pro'] ?? false;
       setState(() {});
     }
   }

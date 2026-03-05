@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/navigation_drawer.dart';
+import 'screens/pro_subscription_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -20,6 +21,7 @@ class _HomePageState extends State<HomePage> {
   int unreadNotifications = 0;
   int completedJobs = 0;
   String userName = '';
+  bool isPro = false;
 
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _notificationsChannel;
@@ -48,12 +50,13 @@ class _HomePageState extends State<HomePage> {
 
     final profile = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, is_pro')
         .eq('id', user.id)
         .single();
 
     setState(() {
       userName = profile['full_name'] ?? '';
+      isPro = profile['is_pro'] ?? false;
     });
   }
 
@@ -71,8 +74,6 @@ class _HomePageState extends State<HomePage> {
       completedJobs = data.length;
     });
   }
-
-  // ================== MESSAGES ==================
 
   Future<void> _loadUnreadMessages() async {
     final user = supabase.auth.currentUser;
@@ -123,8 +124,6 @@ class _HomePageState extends State<HomePage> {
         .subscribe();
   }
 
-  // ================== NOTIFICATIONS ==================
-
   Future<void> _loadUnreadNotifications() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -172,8 +171,6 @@ class _HomePageState extends State<HomePage> {
         )
         .subscribe();
   }
-
-  // ================== ICONS ==================
 
   Widget _buildMessagesIcon() {
     return Stack(
@@ -238,6 +235,53 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildProBanner() {
+    if (isPro) return const SizedBox();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 20, bottom: 10),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: brandYellow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Diventa PRO',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: brandBlue,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Ricevi richieste di lavoro prima degli altri grazie al matching automatico.',
+            style: TextStyle(color: brandBlue),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: brandBlue,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ProSubscriptionScreen(),
+                ),
+              );
+            },
+            child: const Text('Attiva PRO — 6,99€ / mese'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,6 +325,7 @@ class _HomePageState extends State<HomePage> {
                 color: brandBlue.withOpacity(0.6),
               ),
             ),
+            _buildProBanner(),
             const SizedBox(height: 28),
             _PrimaryCard(
               icon: Icons.search,
