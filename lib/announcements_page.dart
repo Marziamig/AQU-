@@ -38,7 +38,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
       final response = await supabase
           .from('ads')
           .select(
-              '*, profiles(rating_avg, rating_count, avg_response_minutes, response_speed_label)')
+              '*, profiles(rating_avg, rating_count, avg_response_minutes, response_speed_label, is_pro)')
           .eq('status', 'open');
 
       final filtered = myId == null
@@ -153,6 +153,23 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
     return const SizedBox.shrink();
   }
 
+  Widget _buildProBadge(bool isPro) {
+    if (!isPro) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade200,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        '⭐ PRO',
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
   Widget _emptyState() {
     return const Center(
       child: Text('Nessun annuncio disponibile'),
@@ -181,6 +198,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                     final rating = (profile?['rating_avg'] ?? 0).toDouble();
                     final ratingCount = profile?['rating_count'] ?? 0;
                     final responseLabel = profile?['response_speed_label'];
+                    final isPro = profile?['is_pro'] ?? false;
 
                     final createdAt =
                         DateTime.tryParse(ad['created_at'] ?? '') ??
@@ -227,41 +245,53 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: Text(ad['user_name'] ?? 'Utente'),
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        ad['user_name'] ?? 'Utente',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      _buildProBadge(isPro),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isRequest
+                                              ? Colors.orange.shade100
+                                              : Colors.blue.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          isRequest ? 'Richiesta' : 'Offerta',
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      if (isNew)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade100,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'Nuovo',
+                                            style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isRequest
-                                        ? Colors.orange.shade100
-                                        : Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    isRequest ? 'Richiesta' : 'Offerta',
-                                    style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                if (isNew) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'Nuovo',
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
                             const SizedBox(height: 4),

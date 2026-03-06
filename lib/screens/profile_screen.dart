@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -206,6 +207,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
   }
 
+  Future<void> _manageProSubscription() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      final profile = await supabase
+          .from('profiles')
+          .select('stripe_customer_id')
+          .eq('id', user.id)
+          .single();
+
+      final customerId = profile['stripe_customer_id'];
+
+      if (customerId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Customer Stripe non trovato')),
+        );
+        return;
+      }
+
+      final response = await supabase.functions.invoke(
+        'create-customer-portal',
+        body: {'customer_id': customerId},
+      );
+
+      final portalUrl = response.data['url'];
+
+      if (portalUrl != null) {
+        await launchUrl(Uri.parse(portalUrl));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore apertura portale: $e')),
+      );
+    }
+  }
+
   Widget _buildStars(double rating) {
     final fullStars = rating.floor();
     return Row(
@@ -234,6 +272,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 const Icon(Icons.person, size: 80),
+                const SizedBox(height: 6),
+                if (isPro)
+                  const Center(
+                    child: Chip(
+                      label: Text(
+                        'PRO',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      backgroundColor: Colors.amber,
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                if (isPro)
+                  ElevatedButton.icon(
+                    onPressed: _manageProSubscription,
+                    icon: const Icon(Icons.workspace_premium),
+                    label: const Text('Gestisci abbonamento PRO'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (ratingCount > 0) ...[
                   _buildStars(ratingAvg),

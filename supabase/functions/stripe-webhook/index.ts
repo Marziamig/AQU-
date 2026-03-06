@@ -149,13 +149,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const userId = session.metadata?.user_id;
 
       if (!userId) {
-        return new Response("Missing user_id metadata", { status: 400 });
+        console.log("user_id mancante nei metadata Stripe");
+        return new Response("No user id", { status: 200 });
       }
 
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 30);
+      const expirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-      await fetch(
+      const res = await fetch(
         `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`,
         {
           method: "PATCH",
@@ -163,14 +163,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
             "Content-Type": "application/json",
+            Prefer: "return=minimal",
           },
           body: JSON.stringify({
             is_pro: true,
             subscription_status: "active",
-            subscription_expires_at: expires.toISOString(),
+            subscription_expires_at: expirationDate.toISOString(),
           }),
         }
       );
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Errore aggiornamento PRO:", errorText);
+      } else {
+        console.log("Utente aggiornato a PRO:", userId);
+      }
     }
 
     return new Response("OK", {

@@ -16,7 +16,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int unreadMessages = 0;
   int unreadNotifications = 0;
   int completedJobs = 0;
@@ -29,19 +29,33 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadUnreadMessages();
-    _loadUnreadNotifications();
-    _loadUserInfo();
-    _loadCompletedJobs();
+    WidgetsBinding.instance.addObserver(this);
+
+    _refreshAll();
     _listenMessagesRealtime();
     _listenNotificationsRealtime();
   }
 
+  Future<void> _refreshAll() async {
+    await _loadUserInfo();
+    await _loadUnreadMessages();
+    await _loadUnreadNotifications();
+    await _loadCompletedJobs();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messagesChannel?.unsubscribe();
     _notificationsChannel?.unsubscribe();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshAll();
+    }
   }
 
   Future<void> _loadUserInfo() async {
@@ -53,6 +67,8 @@ class _HomePageState extends State<HomePage> {
         .select('full_name, is_pro')
         .eq('id', user.id)
         .single();
+
+    if (!mounted) return;
 
     setState(() {
       userName = profile['full_name'] ?? '';
@@ -70,6 +86,8 @@ class _HomePageState extends State<HomePage> {
         .eq('user_id', user.id)
         .eq('status', 'paid');
 
+    if (!mounted) return;
+
     setState(() {
       completedJobs = data.length;
     });
@@ -84,6 +102,8 @@ class _HomePageState extends State<HomePage> {
         .select('id')
         .eq('receiver_id', user.id)
         .eq('is_read', false);
+
+    if (!mounted) return;
 
     setState(() {
       unreadMessages = data.length;
@@ -100,26 +120,13 @@ class _HomePageState extends State<HomePage> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          callback: (payload) {
-            final newMsg = payload.newRecord;
-
-            if (newMsg['receiver_id']?.toString() == user.id &&
-                (newMsg['is_read'] == false || newMsg['is_read'] == null)) {
-              _loadUnreadMessages();
-            }
-          },
+          callback: (_) => _loadUnreadMessages(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'messages',
-          callback: (payload) {
-            final updated = payload.newRecord;
-
-            if (updated['receiver_id']?.toString() == user.id) {
-              _loadUnreadMessages();
-            }
-          },
+          callback: (_) => _loadUnreadMessages(),
         )
         .subscribe();
   }
@@ -133,6 +140,8 @@ class _HomePageState extends State<HomePage> {
         .select('id')
         .eq('user_id', user.id)
         .eq('is_read', false);
+
+    if (!mounted) return;
 
     setState(() {
       unreadNotifications = data.length;
@@ -149,25 +158,13 @@ class _HomePageState extends State<HomePage> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'notifications',
-          callback: (payload) {
-            final newNotification = payload.newRecord;
-
-            if (newNotification['user_id']?.toString() == user.id) {
-              _loadUnreadNotifications();
-            }
-          },
+          callback: (_) => _loadUnreadNotifications(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'notifications',
-          callback: (payload) {
-            final updated = payload.newRecord;
-
-            if (updated['user_id']?.toString() == user.id) {
-              _loadUnreadNotifications();
-            }
-          },
+          callback: (_) => _loadUnreadNotifications(),
         )
         .subscribe();
   }
@@ -267,13 +264,14 @@ class _HomePageState extends State<HomePage> {
               backgroundColor: brandBlue,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => const ProSubscriptionScreen(),
                 ),
               );
+              await _refreshAll();
             },
             child: const Text('Attiva PRO — 6,99€ / mese'),
           ),
@@ -420,18 +418,18 @@ class _PrimaryCard extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
-                    'Trova un servizio vicino a te',
-                    style: TextStyle(
+                    title,
+                    style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: brandBlue),
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
-                    'Cerca tra gli annunci disponibili',
-                    style: TextStyle(fontSize: 14, color: brandBlue),
+                    subtitle,
+                    style: const TextStyle(fontSize: 14, color: brandBlue),
                   ),
                 ],
               ),

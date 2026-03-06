@@ -11,8 +11,10 @@ class ProSubscriptionScreen extends StatefulWidget {
   State<ProSubscriptionScreen> createState() => _ProSubscriptionScreenState();
 }
 
-class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
+class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
+    with WidgetsBindingObserver {
   bool loading = false;
+  bool isPro = false;
 
   Future<void> _startStripeCheckout(BuildContext context) async {
     final user = supabase.auth.currentUser;
@@ -58,33 +60,39 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
         .eq('id', user.id)
         .single();
 
-    if (profile['is_pro'] == true) {
-      if (!mounted) return;
+    if (!mounted) return;
 
-      Navigator.pop(context);
+    setState(() {
+      isPro = profile['is_pro'] == true;
+    });
+
+    if (isPro) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
+  }
+
+  void _disableProMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Il tuo abbonamento PRO verrà disattivato.'),
+      ),
+    );
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
-    // controlla quando l'utente torna alla app
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshProStatus();
     });
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _refreshProStatus();
-  }
-
-  @override
-  void didUpdateWidget(covariant ProSubscriptionScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _refreshProStatus();
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -156,15 +164,20 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
               ),
             ),
             const SizedBox(height: 40),
+
+            /// ATTIVA PRO (disabilitato se già PRO)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD84D),
+                  backgroundColor:
+                      isPro ? Colors.grey : const Color(0xFFFFD84D),
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                onPressed: loading ? null : () => _startStripeCheckout(context),
+                onPressed: (loading || isPro)
+                    ? null
+                    : () => _startStripeCheckout(context),
                 child: loading
                     ? const CircularProgressIndicator()
                     : const Text(
@@ -173,6 +186,34 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen> {
                       ),
               ),
             ),
+
+            if (isPro) ...[
+              const SizedBox(height: 15),
+
+              /// DISATTIVA PRO
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: () => _disableProMessage(context),
+                  child: const Text(
+                    'Disattiva PRO',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              const Text(
+                'Il tuo abbonamento PRO verrà disattivato.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+
             const SizedBox(height: 10),
             const Text(
               'Puoi annullare l’abbonamento in qualsiasi momento.',

@@ -1,6 +1,8 @@
 declare const Deno: any;
 
 const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY")!;
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY")!;
 
 Deno.serve(async (req: Request) => {
   try {
@@ -33,11 +35,50 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // CREAZIONE CUSTOMER STRIPE
+    const customerParams = new URLSearchParams();
+    customerParams.append("email", email);
+
+    const customerRes = await fetch(
+      "https://api.stripe.com/v1/customers",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeSecretKey}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: customerParams,
+      }
+    );
+
+    const customer = await customerRes.json();
+
+    if (!customerRes.ok) {
+      return new Response(JSON.stringify(customer), { status: 400 });
+    }
+
+    const stripeCustomerId = customer.id;
+
+    // SALVATAGGIO CUSTOMER ID IN PROFILES
+    await fetch(
+      `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stripe_customer_id: stripeCustomerId,
+        }),
+      }
+    );
+
     const params = new URLSearchParams();
 
     params.append("mode", "payment");
 
-    // redirect gestito dall'app mobile
     params.append("success_url", "aqui://pro-success");
     params.append("cancel_url", "aqui://pro-cancel");
 
@@ -46,7 +87,8 @@ Deno.serve(async (req: Request) => {
     params.append("line_items[0][price_data][unit_amount]", "699");
     params.append("line_items[0][quantity]", "1");
 
-    params.append("customer_email", email);
+    params.append("customer", stripeCustomerId);
+
     params.append("metadata[user_id]", userId);
 
     const stripeResponse = await fetch(
