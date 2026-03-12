@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/payment_service.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -48,7 +47,7 @@ class _ChatPageState extends State<ChatPage> {
 
   bool isRequestingPayment = false;
 
-  final PaymentService _paymentService = PaymentService();
+  String? otherUserName;
 
   @override
   void initState() {
@@ -59,6 +58,7 @@ class _ChatPageState extends State<ChatPage> {
     _checkIfReviewed();
     _listenRealtime();
     _listenPaymentRealtime();
+    _loadOtherUserName();
   }
 
   @override
@@ -67,6 +67,23 @@ class _ChatPageState extends State<ChatPage> {
     _paymentChannel?.unsubscribe();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOtherUserName() async {
+    final myId = supabase.auth.currentUser?.id;
+    if (widget.receiverId == null || widget.receiverId == myId) return;
+
+    final profile = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', widget.receiverId!)
+        .eq('is_deleted', false)
+        .maybeSingle();
+
+    if (profile != null) {
+      otherUserName = profile['full_name'];
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _checkIfReviewed() async {
@@ -230,6 +247,21 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
+    final existing = await supabase
+        .from('payment_requests')
+        .select('id')
+        .eq('conversation_id', widget.conversationId)
+        .inFilter('status', ['requested', 'pending'])
+        .limit(1)
+        .maybeSingle();
+
+    if (existing != null) {
+      setState(() {
+        isRequestingPayment = false;
+      });
+      return;
+    }
+
     final base = adPrice!;
     final percent = base * 0.05;
     final fixed = 0.50;
@@ -263,48 +295,10 @@ class _ChatPageState extends State<ChatPage> {
     });
 
     await _loadPaymentStatus();
-  }
 
-  Future<void> _startPayment() async {
-    final myId = supabase.auth.currentUser?.id;
-    if (totalAmount == null || paymentRequestId == null || myId != payerId) {
-      return;
-    }
-
-    try {
-      await _paymentService.startPayment(
-        totalAmount!,
-        requestId: paymentRequestId!,
-        requestType: 'service',
-      );
-
-      await supabase
-          .from('payment_requests')
-          .update({'status': 'paid'}).eq('id', paymentRequestId!);
-
-      if (requesterId != null && baseAmount != null) {
-        await supabase.from('notifications').insert({
-          'user_id': requesterId,
-          'title': 'Pagamento effettuato',
-          'body':
-              'Il pagamento di €${baseAmount!.toStringAsFixed(2)} è stato effettuato.',
-          'is_read': false,
-          'reference_id': widget.conversationId,
-        });
-      }
-
-      await _loadPaymentStatus();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pagamento completato')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Errore durante il pagamento')),
-      );
-    }
+    setState(() {
+      isRequestingPayment = false;
+    });
   }
 
   Future<void> _loadMessages() async {
@@ -338,7 +332,8 @@ class _ChatPageState extends State<ChatPage> {
     final profiles = await supabase
         .from('profiles')
         .select('id, full_name')
-        .inFilter('id', ids);
+        .inFilter('id', ids)
+        .eq('is_deleted', false);
 
     for (final p in profiles) {
       userNames[p['id']] = p['full_name'];
@@ -359,8 +354,10 @@ class _ChatPageState extends State<ChatPage> {
           ),
           callback: (payload) async {
             final newMessage = payload.newRecord;
+
             messages.add(newMessage);
             await _loadUserNames();
+
             if (mounted) {
               setState(() {});
               _scrollToBottom();
@@ -424,7 +421,10 @@ class _ChatPageState extends State<ChatPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat', style: TextStyle(color: Colors.black)),
+        title: Text(
+          otherUserName ?? 'Utente',
+          style: const TextStyle(color: Colors.black),
+        ),
         backgroundColor: const Color(0xFFFFD84D),
         iconTheme: const IconThemeData(color: Colors.black),
         elevation: 0,
@@ -469,48 +469,6 @@ class _ChatPageState extends State<ChatPage> {
                 ],
               ),
             ),
-          if (canRequestPayment &&
-              (paymentStatus == 'none' || paymentStatus == 'requested'))
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: ElevatedButton(
-                onPressed: (paymentStatus == 'none' && !isRequestingPayment)
-                    ? _requestPayment
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      (paymentStatus == 'none' && !isRequestingPayment)
-                          ? const Color(0xFFFFD84D)
-                          : Colors.grey,
-                ),
-                child: Text(
-                  paymentStatus == 'requested'
-                      ? 'Richiesta inviata'
-                      : 'Richiedi pagamento (€${adPrice!.toStringAsFixed(2)})',
-                ),
-              ),
-            )
-          else if (paymentStatus == 'paid' && myId != null)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  const Text(
-                    'Pagamento effettuato',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (!hasReviewed)
-                    ElevatedButton(
-                      onPressed: _leaveReview,
-                      child: const Text('Lascia una recensione'),
-                    ),
-                ],
-              ),
-            ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -520,19 +478,20 @@ class _ChatPageState extends State<ChatPage> {
                 final msg = messages[i];
                 final isMe = msg['sender_id'] == myId;
                 final name =
-                    isMe ? 'Tu' : userNames[msg['sender_id']] ?? 'Utente';
+                    isMe ? '' : userNames[msg['sender_id']] ?? 'Utente';
 
                 return Column(
                   crossAxisAlignment:
                       isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
+                    if (!isMe)
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
-                    ),
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       padding: const EdgeInsets.all(12),
@@ -552,53 +511,68 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
           ),
-          if (paymentStatus == 'requested' &&
-              myId != null &&
-              myId == payerId &&
-              totalAmount != null)
+          if (paymentStatus == 'requested' && myId != payerId)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ElevatedButton(
+                onPressed: null,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                child: const Text('Richiesta inviata'),
+              ),
+            ),
+          if (paymentStatus == 'requested' && myId == payerId)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/payment',
+                    arguments: {
+                      'requestId': paymentRequestId,
+                      'baseAmount': baseAmount,
+                      'percentFee': percentFee,
+                      'fixedFee': fixedFee,
+                      'totalAmount': totalAmount,
+                      'requesterId': requesterId,
+                    },
+                  );
+                },
+                child: const Text('Procedi al pagamento'),
+              ),
+            ),
+          if (canRequestPayment && paymentStatus == 'none')
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ElevatedButton(
+                onPressed: isRequestingPayment ? null : _requestPayment,
+                child: const Text('Richiedi pagamento'),
+              ),
+            ),
+          if (paymentStatus == 'paid' && !hasReviewed && myId == payerId)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  top: BorderSide(color: Colors.grey),
-                ),
+                color: Colors.yellow.shade100,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Pagamento richiesto',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Servizio: €${(baseAmount ?? 0).toStringAsFixed(2)}',
-                        ),
-                        Text(
-                          'Commissione Aquì: €${((percentFee ?? 0) + (fixedFee ?? 0)).toStringAsFixed(2)}',
-                        ),
-                        Text(
-                          'Totale: €${totalAmount!.toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
+                  const Text(
+                    '⭐ Servizio completato',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Lascia una recensione per aiutare altri utenti.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: _startPayment,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFD84D),
-                    ),
-                    child: const Text(
-                      'Procedi al pagamento',
-                      style: TextStyle(color: Colors.black),
-                    ),
+                    onPressed: _leaveReview,
+                    child: const Text('Lascia recensione'),
                   ),
                 ],
               ),

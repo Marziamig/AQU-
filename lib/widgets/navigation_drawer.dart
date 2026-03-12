@@ -40,8 +40,6 @@ class NavigationDrawerWidget extends StatelessWidget {
               Navigator.pushNamed(context, '/faq');
             },
           ),
-
-          // ✅ PRIVACY POLICY
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: const Text('Privacy Policy'),
@@ -50,8 +48,6 @@ class NavigationDrawerWidget extends StatelessWidget {
               Navigator.pushNamed(context, '/privacy');
             },
           ),
-
-          // ✅ TERMINI DI UTILIZZO
           ListTile(
             leading: const Icon(Icons.description_outlined),
             title: const Text('Termini di utilizzo'),
@@ -60,7 +56,6 @@ class NavigationDrawerWidget extends StatelessWidget {
               Navigator.pushNamed(context, '/terms');
             },
           ),
-
           const Spacer(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -69,9 +64,13 @@ class NavigationDrawerWidget extends StatelessWidget {
               style: TextStyle(color: Colors.red),
             ),
             onTap: () async {
+              final navigator = Navigator.of(context);
+
+              navigator.pop(); // chiude drawer
+
               await Supabase.instance.client.auth.signOut();
-              Navigator.pushNamedAndRemoveUntil(
-                context,
+
+              navigator.pushNamedAndRemoveUntil(
                 '/login',
                 (route) => false,
               );

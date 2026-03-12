@@ -17,7 +17,9 @@ import 'screens/map_list_screen.dart';
 import 'screens/faq_screen.dart';
 import 'screens/privacy_screen.dart';
 import 'screens/terms_screen.dart';
-import 'screens/notifications_page.dart'; // 🔥 AGGIUNTO
+import 'screens/notifications_page.dart';
+import 'screens/verify_code_page.dart';
+import 'screens/payment_screen.dart';
 import 'splash_screen.dart';
 
 const String supabaseUrl = 'https://dawwywntowafqsmacvsg.supabase.co';
@@ -27,6 +29,8 @@ const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
 
 const String stripePublishableKey =
     'pk_test_51Szw56HfQYIo3wUltO8tYfT4dJ8RvbCUcHE7dQ0ZRv9aGB1eWFFfdEqOOf7H0I91bPRzXgYetJMRKXYI3YJaMhDI0043sH1GNV';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,12 +49,50 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final supabase = Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+
+    supabase.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+      final session = data.session;
+
+      if (event == AuthChangeEvent.signedOut) {
+        navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+
+      if (event == AuthChangeEvent.signedIn && session != null) {
+        navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/home', (route) => false);
+      }
+
+      if (event == AuthChangeEvent.userUpdated) {
+        navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+
+      if (event == AuthChangeEvent.tokenRefreshed && session == null) {
+        navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Aqui',
       theme: ThemeData(
@@ -65,18 +107,24 @@ class MyApp extends StatelessWidget {
         '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginPage(),
         '/register': (_) => const RegisterPage(),
+        '/verify-code': (_) => const VerifyCodePage(),
         '/home': (_) => const HomePage(),
         '/announcements': (_) => const AnnouncementsPage(),
         '/profile': (_) => const ProfileScreen(),
         '/messages': (_) => const MessagesScreen(),
-        '/notifications': (_) => const NotificationsPage(), // 🔥 AGGIUNTO
+        '/notifications': (_) => const NotificationsPage(),
         '/create-ad': (_) => const CreateAdScreen(),
         '/create-transport': (_) => const CreateTransportScreen(),
         '/create-request': (_) => const CreateRequestScreen(),
         '/map-list': (_) => const MapListScreen(),
+
+        // ROUTE PER LE NOTIFICHE
+        '/ad-details': (_) => const MapListScreen(),
+
         '/faq': (_) => const FaqScreen(),
         '/privacy': (_) => const PrivacyScreen(),
         '/terms': (_) => const TermsScreen(),
+
         '/reviews': (context) {
           final args = ModalRoute.of(context)!.settings.arguments
               as Map<String, dynamic>;
@@ -86,6 +134,7 @@ class MyApp extends StatelessWidget {
             adId: args['adId'],
           );
         },
+
         '/chat': (context) {
           final args = ModalRoute.of(context)!.settings.arguments
               as Map<String, dynamic>;
@@ -93,6 +142,20 @@ class MyApp extends StatelessWidget {
           return ChatPage(
             conversationId: args['conversationId'],
             receiverId: args['receiverId'],
+          );
+        },
+
+        '/payment': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>;
+
+          return PaymentScreen(
+            requestId: args['requestId'],
+            baseAmount: args['baseAmount'],
+            percentFee: args['percentFee'],
+            fixedFee: args['fixedFee'],
+            totalAmount: args['totalAmount'],
+            requesterId: args['requesterId'],
           );
         },
       },

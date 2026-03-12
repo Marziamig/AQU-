@@ -24,15 +24,15 @@ class PaymentService {
         },
       );
 
-      // 🔒 Gestione pagamento già effettuato
+      // 🔒 pagamento già esistente
       if (response.status == 400 &&
           response.data != null &&
-          response.data['error'] == "Payment already completed") {
-        throw Exception("ALREADY_PAID");
+          response.data['error'] == "Payment already exists for this request") {
+        throw Exception("PAYMENT_ALREADY_EXISTS");
       }
 
       if (response.data == null || response.data['clientSecret'] == null) {
-        throw Exception("Errore creazione PaymentIntent");
+        throw Exception("PAYMENT_INTENT_ERROR");
       }
 
       final String clientSecret = response.data['clientSecret'];
@@ -47,11 +47,24 @@ class PaymentService {
 
       await Stripe.instance.presentPaymentSheet();
     } on StripeException catch (e) {
-      throw Exception(
-        "Pagamento annullato o errore Stripe: ${e.error.localizedMessage}",
-      );
+      // ❗ utente chiude PaymentSheet
+      if (e.error.code == FailureCode.Canceled) {
+        throw Exception("PAYMENT_CANCELED");
+      }
+
+      // ❗ carta rifiutata
+      if (e.error.code == FailureCode.Failed) {
+        throw Exception("PAYMENT_FAILED");
+      }
+
+      // ❗ errore sconosciuto Stripe
+      throw Exception("STRIPE_ERROR");
+    } on FunctionException catch (e) {
+      // errore Edge Function Supabase
+      throw Exception("BACKEND_ERROR: ${e.details}");
     } catch (e) {
-      rethrow;
+      // fallback sicurezza
+      throw Exception("PAYMENT_UNKNOWN_ERROR");
     }
   }
 }

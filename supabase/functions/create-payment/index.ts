@@ -61,9 +61,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // 🔒 controllo se esiste già pagamento
+    // 🔒 controllo pagamenti già esistenti (pending, processing o paid)
     const existingPaymentRes = await fetch(
-      `${supabaseUrl}/rest/v1/payments?request_id=eq.${requestId}&status=eq.paid`,
+      `${supabaseUrl}/rest/v1/payments?request_id=eq.${requestId}&status=in.(pending,processing,paid)`,
       {
         headers: {
           apikey: serviceRoleKey,
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (existingPayments.length > 0) {
       return new Response(
-        JSON.stringify({ error: "Payment already completed" }),
+        JSON.stringify({ error: "Payment already exists for this request" }),
         { status: 400 }
       );
     }
@@ -94,6 +94,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           Authorization: `Bearer ${stripeSecretKey}`,
           "Content-Type": "application/x-www-form-urlencoded",
           "Stripe-Version": "2023-10-16",
+          "Idempotency-Key": `payment_${requestId}`,
         },
         body: params,
       }

@@ -4,48 +4,34 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY")!;
 const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
-function timingSafeEqual(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
-
-async function verifyStripeSignature(
-  payload: string,
-  header: string,
-  secret: string
-) {
-  const elements = header.split(",");
+async function verifyStripeSignature(payload: string, sigHeader: string) {
+  const elements = sigHeader.split(",");
   const timestamp = elements.find((e) => e.startsWith("t="))?.split("=")[1];
   const signature = elements.find((e) => e.startsWith("v1="))?.split("=")[1];
 
   if (!timestamp || !signature) return false;
 
-  const encoder = new TextEncoder();
   const signedPayload = `${timestamp}.${payload}`;
 
   const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(secret),
+    new TextEncoder().encode(stripeWebhookSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
 
-  const signatureBuffer = await crypto.subtle.sign(
+  const digest = await crypto.subtle.sign(
     "HMAC",
     key,
-    encoder.encode(signedPayload)
+    new TextEncoder().encode(signedPayload)
   );
 
-  const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+  const expected = Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  return timingSafeEqual(expectedSignature, signature);
+  return expected === signature;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -55,7 +41,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Headers":
-            "authorization, x-client-info, apikey, content-type",
+            "authorization, x-client-info, apikey, content-type, stripe-signature",
         },
       });
     }
@@ -64,120 +50,227 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return new Response("Method not allowed", { status: 405 });
     }
 
-    if (!serviceRoleKey || !stripeWebhookSecret) {
-      return new Response("Environment variables not configured", {
-        status: 500,
-      });
-    }
+    const signature = req.headers.get("stripe-signature");
 
-    const signatureHeader = req.headers.get("stripe-signature");
-    if (!signatureHeader) {
+    if (!signature) {
       return new Response("Missing Stripe signature", { status: 400 });
     }
 
     const body = await req.text();
 
-    const isValid = await verifyStripeSignature(
-      body,
-      signatureHeader,
-      stripeWebhookSecret
-    );
+    const isValid = await verifyStripeSignature(body, signature);
 
     if (!isValid) {
-      return new Response("Invalid signature", { status: 400 });
+      return new Response("Invalid Stripe signature", { status: 400 });
     }
 
     const event = JSON.parse(body);
 
-    // PAGAMENTO SERVIZI
+    console.log("Stripe event:", event.type);
+
     if (event.type === "payment_intent.succeeded") {
-      const paymentIntentId = event.data.object.id;
+      try {
+        const paymentIntentId = event.data.object.id;
 
-      const paymentRes = await fetch(
-        `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}&select=request_id`,
-        {
-          headers: {
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-          },
+        const paymentRes = await fetch(
+          `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}&select=request_id,status`,
+          {
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+          }
+        );
+
+        const payments = await paymentRes.json();
+
+        if (!payments || payments.length === 0) {
+          console.log("payment_intent non collegato a marketplace");
+        } else {
+          const payment = payments[0];
+
+          if (payment.status === "paid") {
+            return new Response("OK", { status: 200 });
+          }
+
+          const requestId = payment.request_id;
+
+          await fetch(
+            `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}`,
+            {
+              method: "PATCH",
+              headers: {
+                apikey: serviceRoleKey,
+                Authorization: `Bearer ${serviceRoleKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                status: "paid",
+              }),
+            }
+          );
+
+          await fetch(`${supabaseUrl}/rest/v1/ads?id=eq.${requestId}`, {
+            method: "PATCH",
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              status: "paid",
+            }),
+          });
         }
-      );
-
-      const payments = await paymentRes.json();
-
-      if (!payments.length) {
-        return new Response("Payment not found", { status: 400 });
+      } catch (e) {
+        console.log("Errore gestione payment_intent:", e);
       }
-
-      const requestId = payments[0].request_id;
-
-      await fetch(
-        `${supabaseUrl}/rest/v1/payments?stripe_payment_intent_id=eq.${paymentIntentId}`,
-        {
-          method: "PATCH",
-          headers: {
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: "paid",
-          }),
-        }
-      );
-
-      await fetch(
-        `${supabaseUrl}/rest/v1/ads?id=eq.${requestId}`,
-        {
-          method: "PATCH",
-          headers: {
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: "paid",
-          }),
-        }
-      );
     }
 
-    // ABBONAMENTO PRO
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
+      try {
+        const session = event.data.object;
 
-      const userId = session.metadata?.user_id;
+        const userId = session.metadata?.user_id;
+        const customerId = session.customer;
+        const subscriptionId = session.subscription;
 
-      if (!userId) {
-        console.log("user_id mancante nei metadata Stripe");
-        return new Response("No user id", { status: 200 });
-      }
+        if (!userId || !subscriptionId) {
+          return new Response("OK", { status: 200 });
+        }
 
-      const expirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const subscriptionRes = await fetch(
+          `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+            },
+          }
+        );
 
-      const res = await fetch(
-        `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`,
-        {
+        const subscription = await subscriptionRes.json();
+
+        const expiresAt = new Date(
+          subscription.current_period_end * 1000
+        ).toISOString();
+
+        await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
           method: "PATCH",
           headers: {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
             "Content-Type": "application/json",
-            Prefer: "return=minimal",
           },
           body: JSON.stringify({
             is_pro: true,
             subscription_status: "active",
-            subscription_expires_at: expirationDate.toISOString(),
+            subscription_expires_at: expiresAt,
+            stripe_customer_id: customerId,
           }),
-        }
-      );
+        });
+      } catch (e) {
+        console.log("Errore gestione PRO checkout:", e);
+      }
+    }
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Errore aggiornamento PRO:", errorText);
-      } else {
-        console.log("Utente aggiornato a PRO:", userId);
+    if (event.type === "invoice.paid") {
+      try {
+        const invoice = event.data.object;
+
+        const customerId = invoice.customer;
+        const subscriptionId = invoice.subscription;
+
+        if (!customerId || !subscriptionId) {
+          return new Response("OK", { status: 200 });
+        }
+
+        const subscriptionRes = await fetch(
+          `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+            },
+          }
+        );
+
+        const subscription = await subscriptionRes.json();
+
+        const expiresAt = new Date(
+          subscription.current_period_end * 1000
+        ).toISOString();
+
+        const profileRes = await fetch(
+          `${supabaseUrl}/rest/v1/profiles?stripe_customer_id=eq.${customerId}&select=id`,
+          {
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+          }
+        );
+
+        const profiles = await profileRes.json();
+
+        if (!profiles || profiles.length === 0) {
+          return new Response("OK", { status: 200 });
+        }
+
+        const userId = profiles[0].id;
+
+        await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
+          method: "PATCH",
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            is_pro: true,
+            subscription_status: "active",
+            subscription_expires_at: expiresAt,
+          }),
+        });
+      } catch (e) {
+        console.log("Errore rinnovo PRO:", e);
+      }
+    }
+
+    if (event.type === "customer.subscription.deleted") {
+      try {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+
+        const profileRes = await fetch(
+          `${supabaseUrl}/rest/v1/profiles?stripe_customer_id=eq.${customerId}&select=id`,
+          {
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+          }
+        );
+
+        const profiles = await profileRes.json();
+
+        if (!profiles || profiles.length === 0) {
+          return new Response("OK", { status: 200 });
+        }
+
+        const userId = profiles[0].id;
+
+        await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
+          method: "PATCH",
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            subscription_status: "canceled",
+          }),
+        });
+      } catch (e) {
+        console.log("Errore cancellazione subscription:", e);
       }
     }
 
@@ -188,6 +281,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       },
     });
   } catch (err) {
-    return new Response(`Webhook error: ${err}`, { status: 400 });
+    console.error("Webhook error:", err);
+    return new Response("OK", { status: 200 });
   }
 });

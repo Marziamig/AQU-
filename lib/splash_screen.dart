@@ -35,35 +35,44 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkSessionAndNavigate() async {
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 2));
 
     final session = supabase.auth.currentSession;
 
     if (!mounted) return;
 
-    if (session != null) {
-      final user = supabase.auth.currentUser;
+    if (session == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
 
-      if (user != null) {
-        final profile = await supabase
-            .from('profiles')
-            .select('is_deleted')
-            .eq('id', user.id)
-            .maybeSingle();
+    final user = supabase.auth.currentUser;
 
-        if (profile != null && profile['is_deleted'] == true) {
-          // 🔒 Account eliminato → logout
-          await supabase.auth.signOut();
-          if (!mounted) return;
-          Navigator.pushReplacementNamed(context, '/login');
-          return;
-        }
+    if (user == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    try {
+      final profile = await supabase
+          .from('profiles')
+          .select('is_deleted')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      if (profile != null && profile['is_deleted'] == true) {
+        await supabase.auth.signOut();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/login');
+        return;
       }
 
-      // ✅ Utente valido
       Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      Navigator.pushReplacementNamed(context, '/login');
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/home');
     }
   }
 

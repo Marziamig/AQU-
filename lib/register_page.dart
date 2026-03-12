@@ -64,32 +64,33 @@ class _RegisterPageState extends State<RegisterPage>
     });
 
     try {
-      final response = await supabase.auth.signUp(
+      await supabase.auth.signInWithOtp(
         email: _email.trim(),
-        password: _password,
       );
 
-      if (response.user != null) {
-        if (!mounted) return;
+      if (!mounted) return;
 
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Controlla la tua email'),
-            content: const Text(
-                'Registrazione completata. Ti abbiamo inviato una email di conferma.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushReplacementNamed(context, '/login');
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Controlla la tua email'),
+          content: const Text(
+              'Ti abbiamo inviato un codice via email. Inseriscilo nella schermata successiva.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(
+                  context,
+                  '/verify-code',
+                  arguments: _email.trim(),
+                );
+              },
+              child: const Text('Inserisci codice'),
+            ),
+          ],
+        ),
+      );
     } on AuthException catch (e) {
       if (e.message.toLowerCase().contains('already registered')) {
         setState(() {

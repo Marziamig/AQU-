@@ -86,6 +86,7 @@ class _CreateTransportScreenState extends State<CreateTransportScreen> {
       'lat': pos.latitude,
       'lng': pos.longitude,
       'transport_date': selectedDate!.toIso8601String(),
+      'ad_type': 'offer',
     });
 
     if (!mounted) return;

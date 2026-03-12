@@ -70,6 +70,32 @@ class _NotificationsPageState extends State<NotificationsPage> {
         .subscribe();
   }
 
+  Future<void> _openNotification(Map n) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    await supabase
+        .from('notifications')
+        .update({'is_read': true}).eq('id', n['id']);
+
+    final referenceId = n['reference_id'];
+
+    if (!mounted) return;
+
+    /// apre direttamente la chat collegata all'annuncio
+    if (referenceId != null) {
+      Navigator.pushNamed(
+        context,
+        '/chat',
+        arguments: {
+          'conversationId': referenceId,
+          'receiverId': null,
+        },
+      );
+      return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,14 +127,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           ? const Icon(Icons.circle,
                               size: 10, color: Colors.red)
                           : null,
-                      onTap: () async {
-                        final user = supabase.auth.currentUser;
-                        if (user == null) return;
-
-                        await supabase
-                            .from('notifications')
-                            .update({'is_read': true}).eq('id', n['id']);
-                      },
+                      onTap: () => _openNotification(n),
                     );
                   },
                 ),

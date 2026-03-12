@@ -65,7 +65,7 @@ class _LoginPageState extends State<LoginPage>
 
       final profile = await supabase
           .from('profiles')
-          .select('is_deleted')
+          .select('id,is_deleted')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -105,11 +105,15 @@ class _LoginPageState extends State<LoginPage>
         }
       }
 
-      if (profile == null) {
-        _askNameAndSave(user.id);
-      } else {
+      /// PROFILO ESISTE → HOME
+      if (profile != null) {
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/home');
+        return;
       }
+
+      /// PROFILO NON ESISTE → CHIEDI NOME
+      _askNameAndSave(user.id);
     } on AuthException {
       setState(() {
         _loginError = 'Email o password non corrette.';
@@ -133,9 +137,16 @@ class _LoginPageState extends State<LoginPage>
     }
 
     try {
-      await supabase.auth.resetPasswordForEmail(_email.trim());
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email di recupero inviata')),
+      await supabase.auth.signInWithOtp(
+        email: _email.trim(),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pushNamed(
+        context,
+        '/verify-code',
+        arguments: _email.trim(),
       );
     } catch (_) {
       setState(() {

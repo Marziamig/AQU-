@@ -29,36 +29,43 @@ class _MessagesScreenState extends State<MessagesScreen> {
       loading = true;
     });
 
-    final data = await supabase
-        .from('messages')
-        .select()
-        .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
-        .order('created_at', ascending: false);
+    try {
+      final data = await supabase
+          .from('messages')
+          .select()
+          .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
+          .order('created_at', ascending: false);
 
-    final visible = data.where((msg) {
-      if (msg['sender_id'] == user.id) {
-        return msg['deleted_by_sender'] != true;
-      } else {
-        return msg['deleted_by_receiver'] != true;
+      final visible = data.where((msg) {
+        if (msg['sender_id'] == user.id) {
+          return msg['deleted_by_sender'] != true;
+        } else {
+          return msg['deleted_by_receiver'] != true;
+        }
+      }).toList();
+
+      final Map<String, Map<String, dynamic>> uniqueChats = {};
+
+      for (final msg in visible) {
+        final adId = msg['ad_id'];
+        if (!uniqueChats.containsKey(adId)) {
+          uniqueChats[adId] = msg;
+        }
       }
-    }).toList();
 
-    final Map<String, Map<String, dynamic>> uniqueChats = {};
+      chats = uniqueChats.values.toList();
 
-    for (final msg in visible) {
-      final adId = msg['ad_id'];
-      if (!uniqueChats.containsKey(adId)) {
-        uniqueChats[adId] = msg;
-      }
+      await _loadUserNames();
+
+      setState(() {
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint('MESSAGES LOAD ERROR: $e');
+      setState(() {
+        loading = false;
+      });
     }
-
-    chats = uniqueChats.values.toList();
-
-    await _loadUserNames();
-
-    setState(() {
-      loading = false;
-    });
   }
 
   Future<void> _loadUserNames() async {
@@ -79,13 +86,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
     if (ids.isEmpty) return;
 
-    final profiles = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .inFilter('id', ids.toList());
+    try {
+      final profiles = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .inFilter('id', ids.toList())
+          .eq('is_deleted', false);
 
-    for (final p in profiles) {
-      userNames[p['id']] = p['full_name'];
+      for (final p in profiles) {
+        userNames[p['id']] = p['full_name'] ?? 'Utente';
+      }
+    } catch (e) {
+      debugPrint('PROFILE LOAD ERROR: $e');
     }
   }
 
@@ -93,11 +105,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    await supabase
-        .from('messages')
-        .update({'is_read': true})
-        .eq('ad_id', adId)
-        .eq('receiver_id', user.id);
+    try {
+      await supabase
+          .from('messages')
+          .update({'is_read': true})
+          .eq('ad_id', adId)
+          .eq('receiver_id', user.id);
+    } catch (_) {}
   }
 
   Future<void> _deleteConversation(String adId) async {
@@ -125,30 +139,32 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
     if (confirm != true) return;
 
-    // 🔥 Aggiorna TUTTI i messaggi della conversazione
-    final messages = await supabase
-        .from('messages')
-        .select('id, sender_id, receiver_id')
-        .eq('ad_id', adId);
+    try {
+      final messages = await supabase
+          .from('messages')
+          .select('id, sender_id, receiver_id')
+          .eq('ad_id', adId);
 
-    for (final msg in messages) {
-      if (msg['sender_id'] == user.id) {
-        await supabase
-            .from('messages')
-            .update({'deleted_by_sender': true}).eq('id', msg['id']);
+      for (final msg in messages) {
+        if (msg['sender_id'] == user.id) {
+          await supabase
+              .from('messages')
+              .update({'deleted_by_sender': true}).eq('id', msg['id']);
+        }
+
+        if (msg['receiver_id'] == user.id) {
+          await supabase
+              .from('messages')
+              .update({'deleted_by_receiver': true}).eq('id', msg['id']);
+        }
       }
 
-      if (msg['receiver_id'] == user.id) {
-        await supabase
-            .from('messages')
-            .update({'deleted_by_receiver': true}).eq('id', msg['id']);
-      }
+      setState(() {
+        chats.removeWhere((chat) => chat['ad_id'] == adId);
+      });
+    } catch (e) {
+      debugPrint('DELETE CHAT ERROR: $e');
     }
-
-    // Rimuove subito dalla lista locale (UX immediata)
-    setState(() {
-      chats.removeWhere((chat) => chat['ad_id'] == adId);
-    });
   }
 
   @override
@@ -181,7 +197,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         (chat['is_read'] == false || chat['is_read'] == null);
 
                     return Dismissible(
-                      key: Key(chat['ad_id']),
+                      key: Key(chat['ad_id'].toString()),
                       direction: DismissDirection.endToStart,
                       background: Container(
                         color: Colors.red,

@@ -1,9 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import "@supabase/functions-js/edge-runtime.d.ts"
 
 Deno.serve(async (req) => {
   try {
-    const { ad_id } = await req.json()
+    const body = await req.json()
+    const ad_id = body?.ad_id
 
     if (!ad_id) {
       return new Response(
@@ -17,7 +17,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // 1️⃣ Recuperiamo la richiesta
     const { data: requestAd, error: requestError } = await supabase
       .from("ads")
       .select("*")
@@ -25,6 +24,7 @@ Deno.serve(async (req) => {
       .single()
 
     if (requestError || !requestAd) {
+      console.log("REQUEST NOT FOUND", requestError)
       return new Response(
         JSON.stringify({ error: "Request not found" }),
         { status: 404 }
@@ -38,27 +38,27 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Determiniamo tipo servizio
-    const serviceType = requestAd.service_type ?? null
-    const zone = requestAd.from_location ?? requestAd.zone ?? null
+    const serviceType = requestAd.service_type?.toLowerCase() || ""
+    const zone = requestAd.from_location?.toLowerCase() || ""
 
-    if (!serviceType || !zone) {
-      return new Response(
-        JSON.stringify({ error: "Missing matching fields" }),
-        { status: 400 }
-      )
-    }
-
-    // 2️⃣ Troviamo PRO compatibili
-    const { data: matchingPros, error: matchError } = await supabase
+    let query = supabase
       .from("profiles")
       .select("id, full_name")
       .eq("is_pro", true)
       .eq("is_deleted", false)
-      .eq("pro_service_type", serviceType)
-      .ilike("zone", zone)
+
+    if (serviceType) {
+      query = query.ilike("pro_service_type", serviceType)
+    }
+
+    if (zone) {
+      query = query.ilike("zone", zone)
+    }
+
+    const { data: matchingPros, error: matchError } = await query
 
     if (matchError) {
+      console.log("MATCH ERROR", matchError)
       return new Response(
         JSON.stringify({ error: "Match error" }),
         { status: 500 }
@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
     }
 
     if (!matchingPros || matchingPros.length === 0) {
+      console.log("NO PRO FOUND")
       return new Response(
         JSON.stringify({
           success: true,
@@ -75,35 +76,49 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 3️⃣ Evitiamo notifiche duplicate
-    const { data: existingNotifications } = await supabase
-      .from("notifications")
-      .select("user_id")
-      .eq("request_id", requestAd.id)
+    const notificationsToInsert: any[] = []
 
-    const alreadyNotifiedIds = existingNotifications?.map(n => n.user_id) || []
+    for (const pro of matchingPros) {
 
-    const notificationsToInsert = matchingPros
-      .filter(pro => !alreadyNotifiedIds.includes(pro.id))
-      .map((pro) => ({
-        user_id: pro.id,
-        request_id: requestAd.id,
-        message: `Nuova richiesta di ${serviceType} in zona ${zone}`,
-        is_read: false,
-        created_at: new Date().toISOString()
-      }))
-
-    if (notificationsToInsert.length > 0) {
-      const { error: insertError } = await supabase
+      const { data: existing } = await supabase
         .from("notifications")
-        .insert(notificationsToInsert)
+        .select("id")
+        .eq("user_id", pro.id)
+        .eq("reference_id", requestAd.id)
+        .limit(1)
 
-      if (insertError) {
-        return new Response(
-          JSON.stringify({ error: "Notification insert error" }),
-          { status: 500 }
-        )
+      if (!existing || existing.length === 0) {
+        notificationsToInsert.push({
+          user_id: pro.id,
+          title: "Nuova richiesta vicino a te",
+          body: `Nuova richiesta di ${requestAd.service_type}`,
+          reference_id: requestAd.id,
+          is_read: false
+        })
       }
+    }
+
+    if (notificationsToInsert.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          matches_found: matchingPros.length,
+          notifications_created: 0
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
+    }
+
+    const { error: insertError } = await supabase
+      .from("notifications")
+      .insert(notificationsToInsert)
+
+    if (insertError) {
+      console.log("INSERT ERROR", insertError)
+      return new Response(
+        JSON.stringify({ error: "Notification insert error" }),
+        { status: 500 }
+      )
     }
 
     return new Response(
@@ -115,9 +130,14 @@ Deno.serve(async (req) => {
       { headers: { "Content-Type": "application/json" } }
     )
 
-  } catch (err) {
+  } catch (err: any) {
+    console.log("SERVER ERROR", err)
+
     return new Response(
-      JSON.stringify({ error: "Server error" }),
+      JSON.stringify({
+        error: "Server error",
+        details: err?.message || "unknown"
+      }),
       { status: 500 }
     )
   }

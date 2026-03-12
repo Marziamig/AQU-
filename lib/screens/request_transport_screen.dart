@@ -46,11 +46,13 @@ class _RequestTransportScreenState extends State<RequestTransportScreen> {
     setState(() => loading = true);
 
     try {
-      await supabase.from('transport_requests').insert({
+      await supabase.from('ads').insert({
         'user_id': user.id,
+        'service_type': 'Trasporti',
         'zone': zoneController.text,
-        'details': detailsController.text,
-        'date': selectedDate!.toIso8601String(),
+        'description': detailsController.text,
+        'price': 0,
+        'ad_type': 'request',
         'created_at': DateTime.now().toIso8601String(),
       });
 
@@ -72,7 +74,7 @@ class _RequestTransportScreenState extends State<RequestTransportScreen> {
       appBar: AppBar(
         title: const Text('Richiedi trasporto',
             style: TextStyle(color: Colors.black)),
-        backgroundColor: const Color(0xFFFFD84D), // ⭐ GIALLO HOME
+        backgroundColor: const Color(0xFFFFD84D),
         iconTheme: const IconThemeData(color: Colors.black),
         elevation: 0,
       ),

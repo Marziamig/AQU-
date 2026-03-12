@@ -19,6 +19,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double ratingAvg = 0;
   int ratingCount = 0;
   bool isPro = false;
+  String? subscriptionStatus;
+  DateTime? subscriptionExpiresAt;
 
   @override
   void initState() {
@@ -33,7 +35,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final data = await supabase
         .from('profiles')
-        .select('full_name, rating_avg, rating_count, is_pro')
+        .select(
+            'full_name, rating_avg, rating_count, is_pro, subscription_status, subscription_expires_at')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -41,8 +44,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _nameController.text = data['full_name'] ?? '';
       ratingAvg = (data['rating_avg'] ?? 0).toDouble();
       ratingCount = data['rating_count'] ?? 0;
-      isPro = data['is_pro'] ?? false;
-      setState(() {});
+
+      subscriptionStatus = data['subscription_status'];
+
+      if (data['subscription_expires_at'] != null) {
+        subscriptionExpiresAt =
+            DateTime.tryParse(data['subscription_expires_at']);
+      }
+
+      // 🔒 sicurezza: PRO valido solo se abbonamento attivo e non scaduto
+      if (data['is_pro'] == true &&
+          subscriptionStatus == 'active' &&
+          subscriptionExpiresAt != null &&
+          subscriptionExpiresAt!.isAfter(DateTime.now())) {
+        isPro = true;
+      } else {
+        isPro = false;
+      }
+
+      if (mounted) setState(() {});
     }
   }
 
@@ -117,6 +137,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _manageProSubscription() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      final profile = await supabase
+          .from('profiles')
+          .select('stripe_customer_id')
+          .eq('id', user.id)
+          .single();
+
+      final customerId = profile['stripe_customer_id'];
+
+      if (customerId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Customer Stripe non trovato')),
+        );
+        return;
+      }
+
+      final response = await supabase.functions.invoke(
+        'create-customer-portal',
+        body: {'customer_id': customerId},
+      );
+
+      final portalUrl = response.data['url'];
+
+      if (portalUrl != null) {
+        await launchUrl(Uri.parse(portalUrl),
+            mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore apertura portale: $e')),
+      );
+    }
+  }
+
   Future<void> _changePassword() async {
     final controller = TextEditingController();
 
@@ -184,11 +242,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirm != true) return;
 
     try {
-      await supabase
-          .from('profiles')
-          .update({'is_deleted': true}).eq('id', user.id);
-
-      await supabase.from('ads').delete().eq('user_id', user.id);
+      await supabase.functions.invoke(
+        'delete-account',
+        body: {'user_id': user.id},
+      );
 
       await supabase.auth.signOut();
 
@@ -205,43 +262,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await supabase.auth.signOut();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
-  }
-
-  Future<void> _manageProSubscription() async {
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
-
-      final profile = await supabase
-          .from('profiles')
-          .select('stripe_customer_id')
-          .eq('id', user.id)
-          .single();
-
-      final customerId = profile['stripe_customer_id'];
-
-      if (customerId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Customer Stripe non trovato')),
-        );
-        return;
-      }
-
-      final response = await supabase.functions.invoke(
-        'create-customer-portal',
-        body: {'customer_id': customerId},
-      );
-
-      final portalUrl = response.data['url'];
-
-      if (portalUrl != null) {
-        await launchUrl(Uri.parse(portalUrl));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Errore apertura portale: $e')),
-      );
-    }
   }
 
   Widget _buildStars(double rating) {
@@ -322,6 +342,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: _saveProfile,
                   child: const Text('Salva nome'),
                 ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _changePassword,
+                  icon: const Icon(Icons.lock),
+                  label: const Text('Cambia password'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFD84D),
+                    foregroundColor: Colors.black,
+                  ),
+                ),
                 const SizedBox(height: 24),
                 const Text(
                   'I miei annunci',
@@ -346,6 +376,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       )),
                 const SizedBox(height: 30),
+                ElevatedButton.icon(
+                  onPressed: _deleteAccount,
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text('Elimina account'),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                ),
+                const SizedBox(height: 12),
                 ElevatedButton.icon(
                   onPressed: _logout,
                   icon: const Icon(Icons.logout),

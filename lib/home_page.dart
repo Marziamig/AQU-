@@ -37,6 +37,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshAll() async {
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+      return;
+    }
+
     await _loadUserInfo();
     await _loadUnreadMessages();
     await _loadUnreadNotifications();
@@ -66,9 +75,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .from('profiles')
         .select('full_name, is_pro')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-    if (!mounted) return;
+    if (!mounted || profile == null) return;
 
     setState(() {
       userName = profile['full_name'] ?? '';
@@ -271,6 +280,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   builder: (_) => const ProSubscriptionScreen(),
                 ),
               );
+
+              await Future.delayed(const Duration(seconds: 1));
               await _refreshAll();
             },
             child: const Text('Attiva PRO — 6,99€ / mese'),
