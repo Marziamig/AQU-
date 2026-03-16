@@ -52,15 +52,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             DateTime.tryParse(data['subscription_expires_at']);
       }
 
-      // 🔒 sicurezza: PRO valido solo se abbonamento attivo e non scaduto
-      if (data['is_pro'] == true &&
-          subscriptionStatus == 'active' &&
-          subscriptionExpiresAt != null &&
-          subscriptionExpiresAt!.isAfter(DateTime.now())) {
-        isPro = true;
-      } else {
-        isPro = false;
-      }
+      /// FIX: se is_pro è true mostriamo PRO immediatamente.
+      /// Il controllo scadenza resta solo informativo.
+      isPro = data['is_pro'] == true;
 
       if (mounted) setState(() {});
     }

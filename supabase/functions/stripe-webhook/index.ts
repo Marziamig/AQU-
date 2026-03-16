@@ -163,24 +163,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
           subscriptionId = fullSession.subscription;
         }
 
-        if (!userId || !subscriptionId) {
+        if (!userId) {
           return new Response("OK", { status: 200 });
         }
 
-        const subscriptionRes = await fetch(
-          `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${stripeSecretKey}`,
-            },
-          }
-        );
+        let expiresAt = null;
 
-        const subscription = await subscriptionRes.json();
+        if (subscriptionId) {
 
-        const expiresAt = new Date(
-          subscription.current_period_end * 1000
-        ).toISOString();
+          const subscriptionRes = await fetch(
+            `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${stripeSecretKey}`,
+              },
+            }
+          );
+
+          const subscription = await subscriptionRes.json();
+
+          expiresAt = new Date(
+            subscription.current_period_end * 1000
+          ).toISOString();
+        }
 
         await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
           method: "PATCH",
@@ -216,24 +221,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const customerId = invoice.customer;
         const subscriptionId = invoice.subscription;
 
-        if (!customerId || !subscriptionId) {
+        if (!customerId) {
           return new Response("OK", { status: 200 });
         }
 
-        const subscriptionRes = await fetch(
-          `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${stripeSecretKey}`,
-            },
-          }
-        );
+        let expiresAt = null;
 
-        const subscription = await subscriptionRes.json();
+        if (subscriptionId) {
 
-        const expiresAt = new Date(
-          subscription.current_period_end * 1000
-        ).toISOString();
+          const subscriptionRes = await fetch(
+            `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${stripeSecretKey}`,
+              },
+            }
+          );
+
+          const subscription = await subscriptionRes.json();
+
+          expiresAt = new Date(
+            subscription.current_period_end * 1000
+          ).toISOString();
+        }
 
         const profileRes = await fetch(
           `${supabaseUrl}/rest/v1/profiles?stripe_customer_id=eq.${customerId}&select=id`,
