@@ -6,6 +6,7 @@ const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY")!;
 
 Deno.serve(async (req: Request) => {
   try {
+
     if (req.method === "OPTIONS") {
       return new Response("ok", {
         headers: {
@@ -52,6 +53,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!stripeCustomerId) {
+
       const customerParams = new URLSearchParams();
       customerParams.append("email", email);
 
@@ -71,20 +73,19 @@ Deno.serve(async (req: Request) => {
       }
 
       stripeCustomerId = customer.id;
-    }
 
-    // SALVA SEMPRE CUSTOMER NEL PROFILO
-    await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
-      method: "PATCH",
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        stripe_customer_id: stripeCustomerId,
-      }),
-    });
+      await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
+        method: "PATCH",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stripe_customer_id: stripeCustomerId,
+        }),
+      });
+    }
 
     const params = new URLSearchParams();
 
@@ -102,7 +103,7 @@ Deno.serve(async (req: Request) => {
 
     params.append("customer", stripeCustomerId);
 
-    params.append("metadata[user_id]", userId);
+    params.append("subscription_data[metadata][user_id]", userId);
 
     const stripeResponse = await fetch(
       "https://api.stripe.com/v1/checkout/sessions",
@@ -128,7 +129,10 @@ Deno.serve(async (req: Request) => {
         "Access-Control-Allow-Origin": "*",
       },
     });
+
   } catch (error) {
+
     return new Response(JSON.stringify({ error }), { status: 500 });
+
   }
 });

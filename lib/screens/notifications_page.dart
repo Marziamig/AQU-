@@ -80,20 +80,31 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     final referenceId = n['reference_id'];
 
+    if (referenceId == null) return;
+
+    /// se la reference è un payment_request recuperiamo l'annuncio collegato
+    final payment = await supabase
+        .from('payment_requests')
+        .select('ad_id')
+        .eq('id', referenceId)
+        .maybeSingle();
+
+    String conversationId = referenceId;
+
+    if (payment != null && payment['ad_id'] != null) {
+      conversationId = payment['ad_id'];
+    }
+
     if (!mounted) return;
 
-    /// apre direttamente la chat collegata all'annuncio
-    if (referenceId != null) {
-      Navigator.pushNamed(
-        context,
-        '/chat',
-        arguments: {
-          'conversationId': referenceId,
-          'receiverId': null,
-        },
-      );
-      return;
-    }
+    Navigator.pushNamed(
+      context,
+      '/chat',
+      arguments: {
+        'conversationId': conversationId,
+        'receiverId': null,
+      },
+    );
   }
 
   @override

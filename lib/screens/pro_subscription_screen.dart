@@ -62,12 +62,26 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
 
     if (!mounted) return;
 
+    final bool proStatus = profile['is_pro'] == true;
+
     setState(() {
-      isPro = profile['is_pro'] == true;
+      isPro = proStatus;
     });
 
-    if (isPro) {
+    if (proStatus) {
       Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  /// attesa webhook più lunga
+  Future<void> _waitForProActivation() async {
+    for (int i = 0; i < 30; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      await _refreshProStatus();
+
+      if (isPro) {
+        return;
+      }
     }
   }
 
@@ -98,7 +112,7 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _refreshProStatus();
+      _waitForProActivation();
     }
   }
 
@@ -164,8 +178,6 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
               ),
             ),
             const SizedBox(height: 40),
-
-            /// ATTIVA PRO (disabilitato se già PRO)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -186,11 +198,8 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
                       ),
               ),
             ),
-
             if (isPro) ...[
               const SizedBox(height: 15),
-
-              /// DISATTIVA PRO
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -204,16 +213,13 @@ class _ProSubscriptionScreenState extends State<ProSubscriptionScreen>
                   ),
                 ),
               ),
-
               const SizedBox(height: 8),
-
               const Text(
                 'Il tuo abbonamento PRO verrà disattivato.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
-
             const SizedBox(height: 10),
             const Text(
               'Puoi annullare l’abbonamento in qualsiasi momento.',

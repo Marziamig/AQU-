@@ -72,6 +72,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  Widget _priceRow(String label, String value, {bool bold = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          value,
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double managementCost = widget.percentFee + widget.fixedFee;
@@ -97,34 +121,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Servizio'),
-                      Text('€ ${widget.baseAmount.toStringAsFixed(2)}'),
-                    ],
+                  _priceRow(
+                    'Servizio',
+                    '€ ${widget.baseAmount.toStringAsFixed(2)}',
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Costo di gestione piattaforma AQUÍ'),
-                      Text('€ ${managementCost.toStringAsFixed(2)}'),
-                    ],
+                  _priceRow(
+                    'Costo di gestione piattaforma AQUÍ',
+                    '€ ${managementCost.toStringAsFixed(2)}',
                   ),
                   const Divider(height: 30),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Totale pagamento',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '€ ${widget.totalAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                  _priceRow(
+                    'Totale pagamento',
+                    '€ ${widget.totalAmount.toStringAsFixed(2)}',
+                    bold: true,
                   ),
                 ],
               ),

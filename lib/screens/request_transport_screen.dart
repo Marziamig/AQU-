@@ -50,6 +50,7 @@ class _RequestTransportScreenState extends State<RequestTransportScreen> {
         'user_id': user.id,
         'service_type': 'Trasporti',
         'zone': zoneController.text,
+        'from_location': zoneController.text,
         'description': detailsController.text,
         'price': 0,
         'ad_type': 'request',

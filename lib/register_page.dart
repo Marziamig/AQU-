@@ -64,8 +64,16 @@ class _RegisterPageState extends State<RegisterPage>
     });
 
     try {
+      // Prima registra l'utente
+      await supabase.auth.signUp(
+        email: _email.trim(),
+        password: _password.trim(),
+      );
+
+      // Poi manda il codice OTP
       await supabase.auth.signInWithOtp(
         email: _email.trim(),
+        shouldCreateUser: false,
       );
 
       if (!mounted) return;

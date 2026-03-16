@@ -5,21 +5,18 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'login_page.dart';
 import 'register_page.dart';
 import 'home_page.dart';
-import 'chat_page.dart';
 import 'announcements_page.dart';
 import 'screens/profile_screen.dart';
 import 'screens/messages_screen.dart';
 import 'screens/create_ad_screen.dart';
 import 'screens/create_request_screen.dart';
 import 'screens/create_transport_screen.dart';
-import 'screens/reviews_screen.dart';
 import 'screens/map_list_screen.dart';
 import 'screens/faq_screen.dart';
 import 'screens/privacy_screen.dart';
 import 'screens/terms_screen.dart';
 import 'screens/notifications_page.dart';
 import 'screens/verify_code_page.dart';
-import 'screens/payment_screen.dart';
 import 'splash_screen.dart';
 
 const String supabaseUrl = 'https://dawwywntowafqsmacvsg.supabase.co';
@@ -41,9 +38,7 @@ Future<void> main() async {
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseAnonKey,
-    authOptions: const FlutterAuthClientOptions(
-      autoRefreshToken: true,
-    ),
+    authOptions: const FlutterAuthClientOptions(autoRefreshToken: true),
   );
 
   runApp(const MyApp());
@@ -68,23 +63,24 @@ class _MyAppState extends State<MyApp> {
       final session = data.session;
 
       if (event == AuthChangeEvent.signedOut) {
-        navigatorKey.currentState
-            ?.pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-
-      if (event == AuthChangeEvent.signedIn && session != null) {
-        navigatorKey.currentState
-            ?.pushNamedAndRemoveUntil('/home', (route) => false);
+        navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
       }
 
       if (event == AuthChangeEvent.userUpdated) {
-        navigatorKey.currentState
-            ?.pushNamedAndRemoveUntil('/login', (route) => false);
+        navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
       }
 
       if (event == AuthChangeEvent.tokenRefreshed && session == null) {
-        navigatorKey.currentState
-            ?.pushNamedAndRemoveUntil('/login', (route) => false);
+        navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
       }
     });
   }
@@ -97,10 +93,7 @@ class _MyAppState extends State<MyApp> {
       title: 'Aqui',
       theme: ThemeData(
         useMaterial3: false,
-        iconTheme: const IconThemeData(
-          color: Colors.black,
-          size: 40,
-        ),
+        iconTheme: const IconThemeData(color: Colors.black, size: 40),
       ),
       initialRoute: '/splash',
       routes: {
@@ -117,47 +110,10 @@ class _MyAppState extends State<MyApp> {
         '/create-transport': (_) => const CreateTransportScreen(),
         '/create-request': (_) => const CreateRequestScreen(),
         '/map-list': (_) => const MapListScreen(),
-
-        // ROUTE PER LE NOTIFICHE
         '/ad-details': (_) => const MapListScreen(),
-
         '/faq': (_) => const FaqScreen(),
         '/privacy': (_) => const PrivacyScreen(),
         '/terms': (_) => const TermsScreen(),
-
-        '/reviews': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments
-              as Map<String, dynamic>;
-
-          return ReviewsScreen(
-            reviewedUserId: args['reviewedUserId'],
-            adId: args['adId'],
-          );
-        },
-
-        '/chat': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments
-              as Map<String, dynamic>;
-
-          return ChatPage(
-            conversationId: args['conversationId'],
-            receiverId: args['receiverId'],
-          );
-        },
-
-        '/payment': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments
-              as Map<String, dynamic>;
-
-          return PaymentScreen(
-            requestId: args['requestId'],
-            baseAmount: args['baseAmount'],
-            percentFee: args['percentFee'],
-            fixedFee: args['fixedFee'],
-            totalAmount: args['totalAmount'],
-            requesterId: args['requesterId'],
-          );
-        },
       },
     );
   }

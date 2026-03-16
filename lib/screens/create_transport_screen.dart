@@ -89,6 +89,11 @@ class _CreateTransportScreenState extends State<CreateTransportScreen> {
       'ad_type': 'offer',
     });
 
+    /// Salva automaticamente che l'utente offre TRASPORTI
+    await supabase
+        .from('profiles')
+        .update({'pro_service_type': 'trasporti'}).eq('id', user.id);
+
     if (!mounted) return;
     Navigator.pop(context);
   }

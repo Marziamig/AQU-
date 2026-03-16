@@ -20,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
 
     _controller = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 1),
       vsync: this,
     );
 
@@ -31,12 +31,13 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    _checkSessionAndNavigate();
+    /// ⚠️ fondamentale: esegui dopo il primo frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkSessionAndNavigate();
+    });
   }
 
   Future<void> _checkSessionAndNavigate() async {
-    await Future.delayed(const Duration(seconds: 2));
-
     final session = supabase.auth.currentSession;
 
     if (!mounted) return;
@@ -56,9 +57,10 @@ class _SplashScreenState extends State<SplashScreen>
     try {
       final profile = await supabase
           .from('profiles')
-          .select('is_deleted')
+          .select('id, is_deleted, full_name')
           .eq('id', user.id)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 5));
 
       if (!mounted) return;
 
@@ -69,11 +71,54 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
+      final fullName = (profile?['full_name'] as String?)?.trim() ?? '';
+
+      if (fullName.isEmpty) {
+        _askNameAndSave(user.id);
+        return;
+      }
+
       Navigator.pushReplacementNamed(context, '/home');
     } catch (_) {
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
     }
+  }
+
+  void _askNameAndSave(String userId) {
+    final controller = TextEditingController();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('Come ti chiami?'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: 'Nome'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                if (controller.text.trim().isEmpty) return;
+
+                await supabase.from('profiles').upsert({
+                  'id': userId,
+                  'full_name': controller.text.trim(),
+                });
+
+                if (!mounted) return;
+
+                Navigator.pop(context);
+                Navigator.pushReplacementNamed(context, '/home');
+              },
+              child: const Text('Continua'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override

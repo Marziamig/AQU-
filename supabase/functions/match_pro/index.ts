@@ -39,7 +39,6 @@ Deno.serve(async (req) => {
     }
 
     const serviceType = requestAd.service_type?.toLowerCase() || ""
-    const zone = requestAd.from_location?.toLowerCase() || ""
 
     let query = supabase
       .from("profiles")
@@ -51,8 +50,12 @@ Deno.serve(async (req) => {
       query = query.ilike("pro_service_type", serviceType)
     }
 
-    if (zone) {
-      query = query.ilike("zone", zone)
+    // Per i servizi normali manteniamo il match sulla zona
+    if (serviceType !== "trasporti") {
+      const zone = requestAd.zone?.toLowerCase() || ""
+      if (zone) {
+        query = query.ilike("zone", zone)
+      }
     }
 
     const { data: matchingPros, error: matchError } = await query

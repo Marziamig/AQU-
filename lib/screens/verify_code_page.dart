@@ -23,19 +23,32 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
     });
 
     try {
-      await supabase.auth.verifyOTP(
+      final response = await supabase.auth.verifyOTP(
         email: email,
         token: _codeController.text.trim(),
         type: OtpType.email,
       );
 
+      final user = response.user;
+
+      if (user == null) {
+        throw const AuthException('Utente non trovato');
+      }
+
+      final profile = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
       if (!mounted) return;
 
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/home',
-        (route) => false,
-      );
+      if (profile == null) {
+        _askNameAndSave(user.id);
+        return;
+      }
+
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } on AuthException catch (e) {
       setState(() {
         _error = e.message;
@@ -51,15 +64,52 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
     }
   }
 
+  void _askNameAndSave(String userId) {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Come ti chiami?'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Nome'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (controller.text.trim().isEmpty) return;
+
+              await supabase.from('profiles').insert({
+                'id': userId,
+                'full_name': controller.text.trim(),
+              });
+
+              if (!mounted) return;
+
+              Navigator.pop(context);
+
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/home',
+                (route) => false,
+              );
+            },
+            child: const Text('Continua'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final email = ModalRoute.of(context)!.settings.arguments as String;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F6ED),
-      appBar: AppBar(
-        title: const Text('Verifica email'),
-      ),
+      appBar: AppBar(title: const Text('Verifica email')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

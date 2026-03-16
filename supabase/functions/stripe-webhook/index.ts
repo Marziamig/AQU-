@@ -3,6 +3,7 @@ declare const Deno: any;
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY")!;
 const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
+const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY")!;
 
 async function verifyStripeSignature(payload: string, sigHeader: string) {
   const elements = sigHeader.split(",");
@@ -36,6 +37,7 @@ async function verifyStripeSignature(payload: string, sigHeader: string) {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   try {
+
     if (req.method === "OPTIONS") {
       return new Response("ok", {
         headers: {
@@ -44,10 +46,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
             "authorization, x-client-info, apikey, content-type, stripe-signature",
         },
       });
-    }
-
-    if (req.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
     }
 
     const signature = req.headers.get("stripe-signature");
@@ -68,8 +66,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     console.log("Stripe event:", event.type);
 
+    /* =====================================================
+       MARKETPLACE PAYMENT
+    ====================================================== */
+
     if (event.type === "payment_intent.succeeded") {
+
       try {
+
         const paymentIntentId = event.data.object.id;
 
         const paymentRes = await fetch(
@@ -84,9 +88,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
         const payments = await paymentRes.json();
 
-        if (!payments || payments.length === 0) {
-          console.log("payment_intent non collegato a marketplace");
-        } else {
+        if (payments && payments.length > 0) {
+
           const payment = payments[0];
 
           if (payment.status === "paid") {
@@ -103,6 +106,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                 apikey: serviceRoleKey,
                 Authorization: `Bearer ${serviceRoleKey}`,
                 "Content-Type": "application/json",
+                Prefer: "return=minimal",
               },
               body: JSON.stringify({
                 status: "paid",
@@ -116,24 +120,48 @@ Deno.serve(async (req: Request): Promise<Response> => {
               apikey: serviceRoleKey,
               Authorization: `Bearer ${serviceRoleKey}`,
               "Content-Type": "application/json",
+              Prefer: "return=minimal",
             },
             body: JSON.stringify({
               status: "paid",
             }),
           });
         }
+
       } catch (e) {
         console.log("Errore gestione payment_intent:", e);
       }
     }
 
+    /* =====================================================
+       PRO SUBSCRIPTION ACTIVATION
+    ====================================================== */
+
     if (event.type === "checkout.session.completed") {
+
       try {
+
         const session = event.data.object;
 
         const userId = session.metadata?.user_id;
         const customerId = session.customer;
-        const subscriptionId = session.subscription;
+
+        let subscriptionId = session.subscription;
+
+        if (!subscriptionId) {
+
+          const sessionRes = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${session.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${stripeSecretKey}`,
+              },
+            }
+          );
+
+          const fullSession = await sessionRes.json();
+          subscriptionId = fullSession.subscription;
+        }
 
         if (!userId || !subscriptionId) {
           return new Response("OK", { status: 200 });
@@ -143,7 +171,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
           {
             headers: {
-              Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+              Authorization: `Bearer ${stripeSecretKey}`,
             },
           }
         );
@@ -160,6 +188,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
             "Content-Type": "application/json",
+            Prefer: "return=minimal",
           },
           body: JSON.stringify({
             is_pro: true,
@@ -168,13 +197,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
             stripe_customer_id: customerId,
           }),
         });
+
       } catch (e) {
         console.log("Errore gestione PRO checkout:", e);
       }
     }
 
+    /* =====================================================
+       SUBSCRIPTION RENEWAL
+    ====================================================== */
+
     if (event.type === "invoice.paid") {
+
       try {
+
         const invoice = event.data.object;
 
         const customerId = invoice.customer;
@@ -188,7 +224,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           `https://api.stripe.com/v1/subscriptions/${subscriptionId}`,
           {
             headers: {
-              Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+              Authorization: `Bearer ${stripeSecretKey}`,
             },
           }
         );
@@ -223,6 +259,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
             "Content-Type": "application/json",
+            Prefer: "return=minimal",
           },
           body: JSON.stringify({
             is_pro: true,
@@ -230,13 +267,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
             subscription_expires_at: expiresAt,
           }),
         });
+
       } catch (e) {
         console.log("Errore rinnovo PRO:", e);
       }
     }
 
+    /* =====================================================
+       SUBSCRIPTION CANCEL
+    ====================================================== */
+
     if (event.type === "customer.subscription.deleted") {
+
       try {
+
         const subscription = event.data.object;
         const customerId = subscription.customer;
 
@@ -264,11 +308,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
             "Content-Type": "application/json",
+            Prefer: "return=minimal",
           },
           body: JSON.stringify({
             subscription_status: "canceled",
+            is_pro: false,
           }),
         });
+
       } catch (e) {
         console.log("Errore cancellazione subscription:", e);
       }
@@ -280,8 +327,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         "Access-Control-Allow-Origin": "*",
       },
     });
+
   } catch (err) {
+
     console.error("Webhook error:", err);
+
     return new Response("OK", { status: 200 });
+
   }
 });

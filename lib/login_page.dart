@@ -28,10 +28,14 @@ class _LoginPageState extends State<LoginPage>
     super.initState();
 
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
 
-    _fadeAnimation =
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
 
     _controller.forward();
   }
@@ -137,17 +141,11 @@ class _LoginPageState extends State<LoginPage>
     }
 
     try {
-      await supabase.auth.signInWithOtp(
-        email: _email.trim(),
-      );
+      await supabase.auth.signInWithOtp(email: _email.trim());
 
       if (!mounted) return;
 
-      Navigator.pushNamed(
-        context,
-        '/verify-code',
-        arguments: _email.trim(),
-      );
+      Navigator.pushNamed(context, '/verify-code', arguments: _email.trim());
     } catch (_) {
       setState(() {
         _loginError = 'Errore nel recupero password';
@@ -206,10 +204,7 @@ class _LoginPageState extends State<LoginPage>
                 child: Column(
                   children: [
                     const SizedBox(height: 40),
-                    Image.asset(
-                      'assets/logo.png',
-                      height: 120,
-                    ),
+                    Image.asset('assets/logo.png', height: 120),
                     const SizedBox(height: 40),
                     Container(
                       padding: const EdgeInsets.all(24),
@@ -264,8 +259,9 @@ class _LoginPageState extends State<LoginPage>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFFFD84D),
                                   foregroundColor: Colors.black,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
@@ -280,8 +276,9 @@ class _LoginPageState extends State<LoginPage>
                             const SizedBox(height: 16),
                             TextButton(
                               onPressed: _goToRegister,
-                              child:
-                                  const Text('Non hai un account? Registrati'),
+                              child: const Text(
+                                'Non hai un account? Registrati',
+                              ),
                             ),
                             TextButton(
                               onPressed: _resetPassword,
@@ -300,9 +297,7 @@ class _LoginPageState extends State<LoginPage>
             Container(
               color: Colors.black.withOpacity(0.35),
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFFFFD84D),
-                ),
+                child: CircularProgressIndicator(color: Color(0xFFFFD84D)),
               ),
             ),
         ],
