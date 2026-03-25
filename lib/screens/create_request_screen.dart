@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:geocoding/geocoding.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -27,6 +28,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
   String selectedType = 'Trasporto';
   String selectedService = 'Pulizie';
+
+  DateTime? selectedDate; // ✅ FIX
 
   @override
   void initState() {
@@ -59,9 +62,33 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     return res['full_name'];
   }
 
+  Future<void> _pickDate() async {
+    // ✅ FIX
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+      initialDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        selectedDate = picked;
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (userPosition == null) return;
+
+    if (selectedType == 'Trasporto' && selectedDate == null) {
+      // ✅ FIX
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona una data')),
+      );
+      return;
+    }
 
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -70,6 +97,29 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
     try {
       final userName = await _getUserName();
+
+      String? zone;
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          userPosition!.latitude,
+          userPosition!.longitude,
+        );
+
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+
+          zone = (place.locality ??
+                  place.subAdministrativeArea ??
+                  place.administrativeArea)
+              ?.toLowerCase();
+        }
+      } catch (_) {
+        zone =
+            "${userPosition!.latitude.toStringAsFixed(2)},${userPosition!.longitude.toStringAsFixed(2)}";
+      }
+
+      zone ??=
+          "${userPosition!.latitude.toStringAsFixed(2)},${userPosition!.longitude.toStringAsFixed(2)}";
 
       final insertResponse = await supabase
           .from('ads')
@@ -87,9 +137,15 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
             'capacity': selectedType == 'Trasporto'
                 ? int.tryParse(capacityController.text)
                 : null,
-            'price': double.parse(priceController.text),
+            'price': selectedType == 'Trasporto'
+                ? 0 // ✅ FIX rimosso prezzo trasporto
+                : double.parse(priceController.text),
+            'transport_date': selectedType == 'Trasporto'
+                ? selectedDate!.toIso8601String()
+                : null, // ✅ FIX
             'lat': userPosition!.latitude,
             'lng': userPosition!.longitude,
+            'zone': zone,
             'status': 'open',
             'ad_type': 'request',
             'created_at': DateTime.now().toIso8601String(),
@@ -213,8 +269,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                           if (selectedType == 'Trasporto') ...[
                             TextFormField(
                               controller: fromController,
-                              decoration:
-                                  const InputDecoration(labelText: 'Zona'),
+                              decoration: const InputDecoration(
+                                  labelText: 'Partenza'), // ✅ FIX
                               validator: (v) => v == null || v.isEmpty
                                   ? 'Obbligatorio'
                                   : null,
@@ -229,8 +285,27 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                             TextFormField(
                               controller: capacityController,
                               decoration: const InputDecoration(
-                                  labelText: 'Posti disponibili'),
+                                  labelText: 'Posti richiesti'), // ✅ FIX
                               keyboardType: TextInputType.number,
+                            ),
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              // ✅ FIX data
+                              onTap: _pickDate,
+                              child: AbsorbPointer(
+                                child: TextFormField(
+                                  decoration: const InputDecoration(
+                                      labelText: 'Data trasporto'),
+                                  controller: TextEditingController(
+                                    text: selectedDate == null
+                                        ? ''
+                                        : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                                  ),
+                                  validator: (_) => selectedDate == null
+                                      ? 'Obbligatorio'
+                                      : null,
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 10),
                           ],
@@ -277,19 +352,20 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                             ),
                             const SizedBox(height: 10),
                           ],
-                          TextFormField(
-                            controller: priceController,
-                            decoration:
-                                const InputDecoration(labelText: 'Prezzo (€)'),
-                            keyboardType: TextInputType.number,
-                            validator: (v) {
-                              final price = double.tryParse(v ?? '');
-                              if (price == null || price <= 0) {
-                                return 'Inserisci un prezzo valido';
-                              }
-                              return null;
-                            },
-                          ),
+                          if (selectedType == 'Servizio') // ✅ FIX
+                            TextFormField(
+                              controller: priceController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Prezzo (€)'),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                final price = double.tryParse(v ?? '');
+                                if (price == null || price <= 0) {
+                                  return 'Inserisci un prezzo valido';
+                                }
+                                return null;
+                              },
+                            ),
                           const SizedBox(height: 20),
                           ElevatedButton(
                             onPressed: loading ? null : _submit,

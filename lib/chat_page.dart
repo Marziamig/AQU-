@@ -71,19 +71,47 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _loadOtherUserName() async {
     final myId = supabase.auth.currentUser?.id;
-    if (widget.receiverId == null || widget.receiverId == myId) return;
+    if (myId == null) return;
+
+    String? otherUserId;
+
+    if (widget.receiverId != null && widget.receiverId != myId) {
+      otherUserId = widget.receiverId;
+    }
+
+    if (otherUserId == null && adOwnerId != null && adOwnerId != myId) {
+      otherUserId = adOwnerId;
+    }
+
+    if (otherUserId == null && messages.isNotEmpty) {
+      for (final msg in messages) {
+        if (msg['sender_id'] != myId) {
+          otherUserId = msg['sender_id'];
+          break;
+        }
+      }
+    }
+
+    if (otherUserId == null) {
+      otherUserName = 'Chat';
+      if (mounted) setState(() {});
+      return;
+    }
 
     final profile = await supabase
         .from('profiles')
         .select('full_name')
-        .eq('id', widget.receiverId!)
+        .eq('id', otherUserId)
         .eq('is_deleted', false)
         .maybeSingle();
 
-    if (profile != null) {
+    if (profile != null && profile['full_name'] != null) {
       otherUserName = profile['full_name'];
-      if (mounted) setState(() {});
+    } else {
+      otherUserName = 'Chat';
     }
+
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkIfReviewed() async {
@@ -178,7 +206,10 @@ class _ChatPageState extends State<ChatPage> {
     adDescription = res['description'];
     adType = res['ad_type'];
 
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _loadOtherUserName(); // ✅ FIX aggiorna nome dopo aver caricato owner
+    }
   }
 
   Future<void> _loadPaymentStatus() async {
@@ -213,16 +244,15 @@ class _ChatPageState extends State<ChatPage> {
     _paymentChannel = supabase
         .channel('payment-${widget.conversationId}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'payment_requests',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'conversation_id',
-            value: widget.conversationId,
-          ),
           callback: (payload) async {
-            await _loadPaymentStatus();
+            final newRecord = payload.newRecord;
+
+            if (newRecord['conversation_id'] == widget.conversationId) {
+              await _loadPaymentStatus();
+            }
           },
         )
         .subscribe();
@@ -238,7 +268,8 @@ class _ChatPageState extends State<ChatPage> {
       isRequestingPayment = true;
     });
 
-    String? calculatedPayerId = widget.receiverId;
+    String? calculatedPayerId =
+        widget.receiverId ?? (adOwnerId == myId ? null : adOwnerId);
 
     if (calculatedPayerId == null) {
       setState(() {
@@ -317,6 +348,7 @@ class _ChatPageState extends State<ChatPage> {
     if (mounted) {
       setState(() {});
       _scrollToBottom();
+      _loadOtherUserName(); // ✅ FIX usa messaggi se necessario
     }
   }
 
@@ -361,6 +393,7 @@ class _ChatPageState extends State<ChatPage> {
             if (mounted) {
               setState(() {});
               _scrollToBottom();
+              _loadOtherUserName(); // ✅ FIX realtime nome
             }
           },
         )
@@ -422,7 +455,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          otherUserName ?? 'Utente',
+          otherUserName ?? 'Chat',
           style: const TextStyle(color: Colors.black),
         ),
         backgroundColor: const Color(0xFFFFD84D),

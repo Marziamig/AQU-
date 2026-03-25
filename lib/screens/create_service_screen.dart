@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -52,6 +53,25 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       desiredAccuracy: LocationAccuracy.high,
     );
 
+    String? zone;
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        pos.latitude,
+        pos.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+
+        zone = (place.locality ??
+                place.subAdministrativeArea ??
+                place.administrativeArea)
+            ?.toLowerCase();
+      }
+    } catch (_) {}
+
+    zone ??= 'unknown';
+
     final userName = await _getUserName();
 
     await supabase.from('ads').insert({
@@ -63,6 +83,11 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       'created_at': DateTime.now().toIso8601String(),
       'lat': pos.latitude,
       'lng': pos.longitude,
+      'zone': zone,
+
+      // ✅ FIX MATCH PRO
+      'ad_type': 'offer',
+      'status': 'open',
     });
 
     if (!mounted) return;
@@ -75,7 +100,7 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       appBar: AppBar(
         title: const Text('Richiedi servizio',
             style: TextStyle(color: Colors.black)),
-        backgroundColor: const Color(0xFFFFD84D), // ⭐ GIALLO HOME
+        backgroundColor: const Color(0xFFFFD84D),
         iconTheme: const IconThemeData(color: Colors.black),
         elevation: 0,
       ),

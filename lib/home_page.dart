@@ -23,6 +23,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String userName = '';
   bool isPro = false;
 
+  bool loadingUser = true; // ✅ FIX
+
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _notificationsChannel;
 
@@ -46,7 +48,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    await _loadUserInfo();
+    await _loadUserInfo(); // prima
     await _loadUnreadMessages();
     await _loadUnreadNotifications();
     await _loadCompletedJobs();
@@ -81,7 +83,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     setState(() {
       userName = profile['full_name'] ?? '';
-      isPro = profile['is_pro'] ?? false;
+      isPro = profile['is_pro'] == true;
+      loadingUser = false; // ✅ FIX
     });
   }
 
@@ -293,6 +296,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (loadingUser) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       drawer: const NavigationDrawerWidget(),
       backgroundColor: backgroundSoft,

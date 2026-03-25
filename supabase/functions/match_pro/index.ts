@@ -40,25 +40,29 @@ Deno.serve(async (req) => {
 
     const serviceType = requestAd.service_type?.toLowerCase() || ""
 
+    // ✅ FIX: trasporti basati su service_type
+    const isTransport =
+      serviceType.includes("trasporto") || serviceType.includes("trasporti")
+
     let query = supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("is_pro", true)
-      .eq("is_deleted", false)
+      .from("ads")
+      .select("id, user_id, service_type, lat, lng")
+      .eq("ad_type", "offer")
+      .eq("status", "open")
 
-    if (serviceType) {
-      query = query.ilike("pro_service_type", serviceType)
+    // ✅ SERVIZI (NON TOCCATI)
+    if (!isTransport && serviceType) {
+      query = query.ilike("service_type", `%${serviceType}%`)
     }
 
-    // Per i servizi normali manteniamo il match sulla zona
-    if (serviceType !== "trasporti") {
-      const zone = requestAd.zone?.toLowerCase() || ""
-      if (zone) {
-        query = query.ilike("zone", zone)
-      }
+    // ✅ TRASPORTI (FIX)
+    if (isTransport) {
+      query = query.or(
+        "service_type.ilike.%trasporto%,service_type.ilike.%trasporti%"
+      )
     }
 
-    const { data: matchingPros, error: matchError } = await query
+    const { data: offers, error: matchError } = await query
 
     if (matchError) {
       console.log("MATCH ERROR", matchError)
@@ -68,8 +72,35 @@ Deno.serve(async (req) => {
       )
     }
 
-    if (!matchingPros || matchingPros.length === 0) {
-      console.log("NO PRO FOUND")
+    const requestLat = requestAd.lat
+    const requestLng = requestAd.lng
+
+    const nearbyOffers = (offers || []).filter((offer: any) => {
+
+      if (!offer.lat || !offer.lng || !requestLat || !requestLng) {
+        return true
+      }
+
+      const R = 6371
+      const dLat = (offer.lat - requestLat) * Math.PI / 180
+      const dLng = (offer.lng - requestLng) * Math.PI / 180
+
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(requestLat * Math.PI / 180) *
+        Math.cos(offer.lat * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2)
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+      const distance = R * c
+
+      return distance <= 10
+    })
+
+    console.log("NEARBY OFFERS:", nearbyOffers)
+
+    if (!nearbyOffers || nearbyOffers.length === 0) {
+      console.log("NO OFFERS FOUND")
       return new Response(
         JSON.stringify({
           success: true,
@@ -81,20 +112,22 @@ Deno.serve(async (req) => {
 
     const notificationsToInsert: any[] = []
 
-    for (const pro of matchingPros) {
+    for (const offer of nearbyOffers) {
 
       const { data: existing } = await supabase
         .from("notifications")
         .select("id")
-        .eq("user_id", pro.id)
+        .eq("user_id", offer.user_id)
         .eq("reference_id", requestAd.id)
         .limit(1)
 
       if (!existing || existing.length === 0) {
         notificationsToInsert.push({
-          user_id: pro.id,
+          user_id: offer.user_id,
           title: "Nuova richiesta vicino a te",
-          body: `Nuova richiesta di ${requestAd.service_type}`,
+          body: isTransport
+            ? `Nuova richiesta trasporto`
+            : `Nuova richiesta di ${requestAd.service_type}`,
           reference_id: requestAd.id,
           is_read: false
         })
@@ -105,7 +138,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          matches_found: matchingPros.length,
+          matches_found: nearbyOffers.length,
           notifications_created: 0
         }),
         { headers: { "Content-Type": "application/json" } }
@@ -127,7 +160,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        matches_found: matchingPros.length,
+        matches_found: nearbyOffers.length,
         notifications_created: notificationsToInsert.length
       }),
       { headers: { "Content-Type": "application/json" } }

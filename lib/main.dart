@@ -8,6 +8,7 @@ import 'home_page.dart';
 import 'announcements_page.dart';
 import 'screens/profile_screen.dart';
 import 'screens/messages_screen.dart';
+import 'chat_page.dart';
 import 'screens/create_ad_screen.dart';
 import 'screens/create_request_screen.dart';
 import 'screens/create_transport_screen.dart';
@@ -17,6 +18,7 @@ import 'screens/privacy_screen.dart';
 import 'screens/terms_screen.dart';
 import 'screens/notifications_page.dart';
 import 'screens/verify_code_page.dart';
+import 'screens/payment_screen.dart'; // ✅ FIX
 import 'splash_screen.dart';
 
 const String supabaseUrl = 'https://dawwywntowafqsmacvsg.supabase.co';
@@ -114,6 +116,42 @@ class _MyAppState extends State<MyApp> {
         '/faq': (_) => const FaqScreen(),
         '/privacy': (_) => const PrivacyScreen(),
         '/terms': (_) => const TermsScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/chat') {
+          final args = settings.arguments as Map<String, dynamic>?;
+
+          if (args == null || args['conversationId'] == null) {
+            return null;
+          }
+
+          return MaterialPageRoute(
+            builder: (_) => ChatPage(
+              conversationId: args['conversationId'],
+              receiverId: args['receiverId'],
+            ),
+          );
+        }
+
+        // ✅ FIX: aggiunta route payment
+        if (settings.name == '/payment') {
+          final args = settings.arguments as Map<String, dynamic>?;
+
+          if (args == null) return null;
+
+          return MaterialPageRoute(
+            builder: (_) => PaymentScreen(
+              requestId: args['requestId'],
+              baseAmount: args['baseAmount'],
+              percentFee: args['percentFee'],
+              fixedFee: args['fixedFee'],
+              totalAmount: args['totalAmount'],
+              requesterId: args['requesterId'],
+            ),
+          );
+        }
+
+        return null;
       },
     );
   }

@@ -18,6 +18,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void initState() {
     super.initState();
+
+    // ✅ NUOVO: gestione apertura diretta da notifica
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+      if (args != null && args['conversationId'] != null) {
+        Navigator.pushNamed(
+          context,
+          '/chat',
+          arguments: args,
+        );
+      }
+    });
+
     _loadChats();
   }
 

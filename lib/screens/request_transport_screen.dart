@@ -14,9 +14,14 @@ class RequestTransportScreen extends StatefulWidget {
 class _RequestTransportScreenState extends State<RequestTransportScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController zoneController = TextEditingController();
+  final TextEditingController fromController =
+      TextEditingController(); // ✅ FIX (ex zone)
+  final TextEditingController toController =
+      TextEditingController(); // ✅ FIX aggiunto
   final TextEditingController detailsController = TextEditingController();
   final TextEditingController dateController = TextEditingController();
+  final TextEditingController seatsController =
+      TextEditingController(); // ✅ FIX aggiunto
 
   bool loading = false;
   DateTime? selectedDate;
@@ -49,10 +54,12 @@ class _RequestTransportScreenState extends State<RequestTransportScreen> {
       await supabase.from('ads').insert({
         'user_id': user.id,
         'service_type': 'Trasporti',
-        'zone': zoneController.text,
-        'from_location': zoneController.text,
+        'from_location': fromController.text, // ✅ FIX
+        'to_location': toController.text, // ✅ FIX
         'description': detailsController.text,
-        'price': 0,
+        'capacity': seatsController.text, // ✅ FIX posti richiesti
+        'price': 0, // mantenuto ma NON usato
+        'transport_date': selectedDate!.toIso8601String(), // ✅ FIX
         'ad_type': 'request',
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -86,8 +93,26 @@ class _RequestTransportScreenState extends State<RequestTransportScreen> {
           child: ListView(
             children: [
               TextFormField(
-                controller: zoneController,
-                decoration: const InputDecoration(labelText: 'Zona'),
+                controller: fromController,
+                decoration:
+                    const InputDecoration(labelText: 'Partenza'), // ✅ FIX
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Obbligatorio' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: toController,
+                decoration:
+                    const InputDecoration(labelText: 'Destinazione'), // ✅ FIX
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Obbligatorio' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: seatsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Posti richiesti'), // ✅ FIX
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Obbligatorio' : null,
               ),

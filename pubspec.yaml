@@ -29,6 +29,7 @@ dependencies:
 
   # Stripe
   flutter_stripe: ^11.0.0
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:

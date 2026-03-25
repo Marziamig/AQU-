@@ -82,20 +82,30 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     if (referenceId == null) return;
 
-    /// se la reference è un payment_request recuperiamo l'annuncio collegato
+    String? conversationId;
+
+    // caso payment_request
     final payment = await supabase
         .from('payment_requests')
         .select('ad_id')
         .eq('id', referenceId)
         .maybeSingle();
 
-    String conversationId = referenceId;
-
     if (payment != null && payment['ad_id'] != null) {
       conversationId = payment['ad_id'];
+    } else {
+      // caso match_pro / ads
+      final ad = await supabase
+          .from('ads')
+          .select('id')
+          .eq('id', referenceId)
+          .maybeSingle();
+      if (ad != null && ad['id'] != null) {
+        conversationId = ad['id'];
+      }
     }
 
-    if (!mounted) return;
+    if (!mounted || conversationId == null) return;
 
     Navigator.pushNamed(
       context,

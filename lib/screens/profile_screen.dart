@@ -22,6 +22,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? subscriptionStatus;
   DateTime? subscriptionExpiresAt;
 
+  String? userEmail;
+
   @override
   void initState() {
     super.initState();
@@ -32,6 +34,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
+
+    userEmail = user.email;
 
     final data = await supabase
         .from('profiles')
@@ -52,8 +56,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             DateTime.tryParse(data['subscription_expires_at']);
       }
 
-      /// FIX: se is_pro è true mostriamo PRO immediatamente.
-      /// Il controllo scadenza resta solo informativo.
       isPro = data['is_pro'] == true;
 
       if (mounted) setState(() {});
@@ -320,6 +322,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
+
+                /// EMAIL UTENTE (NUOVO)
+                if (userEmail != null) ...[
+                  TextField(
+                    enabled: false,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      border: const OutlineInputBorder(),
+                      hintText: userEmail,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
                 TextField(
                   controller: _nameController,
                   decoration: const InputDecoration(

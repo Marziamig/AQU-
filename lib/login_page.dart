@@ -67,11 +67,20 @@ class _LoginPageState extends State<LoginPage>
         throw const AuthException('Login fallito');
       }
 
-      final profile = await supabase
-          .from('profiles')
-          .select('id,is_deleted')
-          .eq('id', user.id)
-          .maybeSingle();
+      /// ✅ FIX: retry per evitare null temporaneo
+      Map<String, dynamic>? profile;
+
+      for (int i = 0; i < 3; i++) {
+        profile = await supabase
+            .from('profiles')
+            .select('id,is_deleted')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (profile != null) break;
+
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
 
       if (profile != null && profile['is_deleted'] == true) {
         final reactivate = await showDialog<bool>(
@@ -116,7 +125,7 @@ class _LoginPageState extends State<LoginPage>
         return;
       }
 
-      /// PROFILO NON ESISTE → CHIEDI NOME
+      /// SOLO SE DAVVERO NON ESISTE
       _askNameAndSave(user.id);
     } on AuthException {
       setState(() {
@@ -170,9 +179,12 @@ class _LoginPageState extends State<LoginPage>
             onPressed: () async {
               if (controller.text.trim().isEmpty) return;
 
+              final user = supabase.auth.currentUser;
+
               await supabase.from('profiles').insert({
                 'id': userId,
                 'full_name': controller.text.trim(),
+                'email': user?.email,
               });
 
               if (!mounted) return;
